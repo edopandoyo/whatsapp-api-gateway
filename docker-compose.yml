@@ -1,0 +1,83 @@
+version: "3.9"
+
+# ============================================================
+# WebWA Gateway — Docker Compose
+# Cara pakai:
+#   Development : docker-compose up
+#   Production  : docker-compose -f docker-compose.yml up -d
+# ============================================================
+
+services:
+  # ----------------------------------------------------------
+  # Backend — Node.js + whatsapp-web.js
+  # ----------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: webwa-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=3000
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:80}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-60}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    volumes:
+      # Persist sesi WA agar tidak scan QR ulang setiap restart
+      - wa_sessions:/app/.wwebjs_auth
+    networks:
+      - webwa-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------
+  # Frontend — React (Vite) served via Nginx
+  # ----------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:3000}
+    container_name: webwa-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - webwa-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ----------------------------------------------------------
+# Volumes — Persistent Data
+# ----------------------------------------------------------
+volumes:
+  wa_sessions:
+    driver: local
+    name: webwa_wa_sessions
+
+# ----------------------------------------------------------
+# Networks
+# ----------------------------------------------------------
+networks:
+  webwa-network:
+    driver: bridge
+    name: webwa-network
