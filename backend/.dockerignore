@@ -1,0 +1,29 @@
+# backend/.dockerignore
+
+# Dependencies — diinstall ulang saat build
+node_modules/
+
+# Session data WhatsApp — jangan masuk image
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Environment
+.env
+.env.*
+
+# Git
+.git/
+.gitignore
+
+# Log
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development only
+*.md
+.eslintrc*
+.prettierrc*

@@ -6,6 +6,8 @@
 # ---- Stage 1: Build ----
 FROM node:20-alpine AS builder
 
+
+
 WORKDIR /app
 
 # Install dependencies
@@ -23,6 +25,8 @@ RUN npm run build
 
 # ---- Stage 2: Serve ----
 FROM nginx:stable-alpine AS runner
+
+RUN apk add --no-cache curl
 
 # Hapus config Nginx default
 RUN rm -rf /etc/nginx/conf.d/*

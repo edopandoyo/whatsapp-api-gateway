@@ -1,0 +1,174 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, .7);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn var(--dur) var(--ease);
+}
+
+.modal {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-xl);
+  width: 360px;
+  padding: 24px;
+  animation: fadeIn var(--dur) var(--ease);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--c-text-2);
+  margin-top: 2px;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--c-text-2);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: color var(--dur);
+}
+
+.closeBtn:hover {
+  color: var(--c-text);
+}
+
+.qrArea {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  margin-bottom: 16px;
+  padding: 10px;
+}
+
+.qrBox {
+  padding: 10px;
+  transition: opacity .4s;
+  background: #111;
+  border-radius: 12px;
+}
+
+.skeleton {
+  width: 220px;
+  height: 220px;
+  background: linear-gradient(90deg, #1c2228, #21262d, #1c2228);
+  background-size: 200%;
+  border-radius: 12px;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.expiredBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px;
+}
+
+.refreshBtn {
+  margin-top: 14px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 8px 18px;
+  color: var(--c-text);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background var(--dur);
+}
+
+.refreshBtn:hover {
+  background: var(--c-brand-700);
+  border-color: var(--c-brand-600);
+}
+
+.statusBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--c-text-2);
+  margin-bottom: 16px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotPulse {
+  background: var(--c-brand-500);
+  animation: pulse 2s ease infinite;
+}
+
+.dotReady {
+  background: var(--c-success);
+}
+
+.dotFailed {
+  background: var(--c-danger);
+}
+
+.steps {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  counter-reset: step;
+}
+
+.steps li {
+  counter-increment: step;
+  font-size: 12px;
+  color: var(--c-text-2);
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.steps li::before {
+  content: counter(step);
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--c-text-3);
+}

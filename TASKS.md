@@ -1,7 +1,7 @@
 # ✅ Task List — WebWA Gateway Development
 
-> **Proyek:** WebWA Gateway  
-> **Update Terakhir:** 19 Maret 2026  
+> **Proyek:** WebWA Gateway
+> **Update Terakhir:** 19 Maret 2026
 > Legend: `[ ]` Belum | `[~]` In Progress | `[x]` Selesai
 
 ---
@@ -35,121 +35,130 @@
 ## 🔧 PHASE 2 — Backend Development
 
 ### 2.1 Server & Middleware
-- [ ] Setup Express server dengan `helmet`, `cors`, `morgan` (logger)
-- [ ] Integrasi Socket.io pada Express server
-- [ ] Buat middleware `authenticateApiKey` (validasi `x-api-key` → query tabel `api_keys`)
-- [ ] Buat middleware `authenticateJWT` (validasi Supabase Bearer Token)
-- [ ] Buat middleware `rateLimiter` dengan `express-rate-limit`
-- [ ] Setup error handler global (catch-all)
-- [ ] Setup environment config loader (`dotenv`)
+- [x] Setup Express server dengan `helmet`, `cors`, `morgan` (logger)
+- [x] Integrasi Socket.io pada Express server
+- [x] Buat middleware `authenticateApiKey` (validasi `x-api-key` → query tabel `api_keys`)
+- [x] Buat middleware `authenticateJWT` (validasi Supabase Bearer Token)
+- [x] Buat middleware `rateLimiter` dengan `express-rate-limit`
+- [x] Setup error handler global (catch-all)
+- [x] Setup environment config loader (`dotenv`) + validasi startup
 
 ### 2.2 WhatsApp Session Manager
-- [ ] Buat `SessionManager` class/module untuk mengelola multiple WA client instances
-- [ ] Implementasi `createSession(sessionId)` — init `whatsapp-web.js` client dengan `LocalAuth`
-- [ ] Implementasi `deleteSession(sessionId)` — logout & destroy client
-- [ ] Implementasi `getSession(sessionId)` — ambil client aktif dari Map
-- [ ] Implementasi `getAllSessions()` — list semua active sessions
-- [ ] Handle event `qr` → emit ke Socket.io room sesi terkait
-- [ ] Handle event `ready` → update status di Supabase + emit ke Socket.io
-- [ ] Handle event `authenticated` → emit ke Socket.io
-- [ ] Handle event `auth_failure` → update status di Supabase + emit ke Socket.io
-- [ ] Handle event `disconnected` → update status di Supabase + emit ke Socket.io
-- [ ] Handle event `message` (pesan masuk) → log ke DB + trigger webhook
-- [ ] Konfigurasi Puppeteer args: `--no-sandbox`, `--disable-setuid-sandbox`, `--disable-dev-shm-usage`
-- [ ] Restore active sessions dari Supabase saat server restart
+- [x] Buat `SessionManager` module untuk mengelola multiple WA client instances
+- [x] Implementasi `createSession(sessionId, io)` — init `whatsapp-web.js` client dengan `LocalAuth`
+- [x] Implementasi `deleteSession(sessionId)` — logout & destroy client
+- [x] Implementasi `getSession(sessionId)` — ambil client aktif dari Map
+- [x] Implementasi `getAllSessions()` — list semua active sessions
+- [x] Handle event `qr` → emit ke Socket.io room sesi terkait
+- [x] Handle event `ready` → update status di Supabase + emit ke Socket.io
+- [x] Handle event `authenticated` → emit ke Socket.io
+- [x] Handle event `auth_failure` → update status di Supabase + emit ke Socket.io
+- [x] Handle event `disconnected` → update status di Supabase + emit ke Socket.io
+- [x] Handle event `message` (pesan masuk) → log ke DB + trigger webhook
+- [x] Konfigurasi Puppeteer args: `--no-sandbox`, `--disable-setuid-sandbox`, `--disable-dev-shm-usage`
+- [x] Restore active sessions dari Supabase saat server restart
 
 ### 2.3 REST API — External Endpoints
-- [ ] `POST /api/v1/send-message` — kirim pesan teks
-  - [ ] Validasi request body (`session_id`, `to`, `message`)
-  - [ ] Validasi sesi aktif & status `connected`
-  - [ ] Format nomor tujuan (tambahkan `@c.us` jika perlu)
-  - [ ] Kirim pesan via `client.sendMessage()`
-  - [ ] Insert log ke tabel `message_logs` (status: `sent`)
-  - [ ] Return response dengan `message_id`
-- [ ] `POST /api/v1/send-media` — kirim media (gambar/dokumen)
-  - [ ] Validasi request body (`session_id`, `to`, `media_url`, `caption`)
-  - [ ] Download media dari URL & buat `MessageMedia` object
-  - [ ] Kirim media via `client.sendMessage()`
-  - [ ] Insert log ke tabel `message_logs`
-  - [ ] Return response dengan `message_id`
+- [x] `POST /api/v1/sessions/:sessionId/messages/text` — kirim pesan teks
+  - [x] Validasi request body (`to`, `text`)
+  - [x] Validasi sesi aktif & status `connected`
+  - [x] Format nomor tujuan (tambahkan `@c.us` jika perlu)
+  - [x] Kirim pesan via `client.sendMessage()`
+  - [x] Insert log ke tabel `message_logs` (status: `sent`/`failed`)
+  - [x] Return response dengan `message_id`
+- [x] `POST /api/v1/sessions/:sessionId/messages/media` — kirim media (gambar/dokumen)
+  - [x] Validasi request body (`to`, `mediaUrl`/`base64`, `mimetype`, `caption`)
+  - [x] Download media dari URL atau base64 & buat `MessageMedia` object
+  - [x] Kirim media via `client.sendMessage()`
+  - [x] Insert log ke tabel `message_logs`
+  - [x] Return response dengan `message_id`
+- [x] `POST /api/v1/sessions/:sessionId/messages/bulk` — kirim pesan ke multiple nomor (maks 100)
+  - [x] Delay 1.2s antar pesan untuk hindari spam-detect WhatsApp
+  - [x] Log setiap pesan individual (sent/failed)
 
 ### 2.4 REST API — Internal Endpoints (Dashboard)
-- [ ] `POST /api/internal/sessions` — buat sesi baru
-  - [ ] Insert ke tabel `sessions` (status: `pending`)
-  - [ ] Panggil `SessionManager.createSession()`
-- [ ] `DELETE /api/internal/sessions/:id` — hapus sesi
-  - [ ] Panggil `SessionManager.deleteSession()`
-  - [ ] Update status di tabel `sessions` (status: `disconnected`)
-- [ ] `GET /api/internal/sessions` — list sesi user
-  - [ ] Query tabel `sessions` berdasarkan `user_id` dari JWT
-- [ ] `GET /api/internal/logs` — riwayat pesan
-  - [ ] Query tabel `message_logs` dengan filter & pagination
-- [ ] `POST /api/internal/api-keys` — buat API Key baru
-  - [ ] Generate random API Key string
-  - [ ] Hash API Key sebelum disimpan (SHA-256 / bcrypt)
-  - [ ] Return API Key plain-text HANYA sekali (saat dibuat)
-- [ ] `DELETE /api/internal/api-keys/:id` — nonaktifkan API Key
-  - [ ] Update `is_active = false`
+- [x] `POST /api/internal/sessions` — buat sesi baru
+  - [x] Insert ke tabel `sessions` (status: `pending`)
+  - [x] Panggil `SessionManager.createSession()`
+- [x] `DELETE /api/internal/sessions/:id` — hapus sesi
+  - [x] Panggil `SessionManager.deleteSession()`
+  - [x] Hapus dari tabel `sessions`
+- [x] `GET /api/internal/sessions` — list sesi user
+  - [x] Query tabel `sessions` berdasarkan `user_id` dari JWT
+- [x] `GET /api/internal/sessions/:id` — detail satu sesi (+ flag `process_alive`)
+- [x] `PATCH /api/internal/sessions/:id` — update nama / webhook_url sesi
+- [x] `POST /api/internal/sessions/:id/reconnect` — re-inisialisasi sesi terputus
+- [x] `GET /api/internal/sessions/:id/messages` — riwayat pesan dengan paginasi
+  - [x] Filter berdasarkan `direction` (inbound/outbound)
+  - [x] Cursor-based pagination (`limit` + `offset`)
+- [x] `POST /api/internal/api-keys` — buat API Key baru
+  - [x] Generate random key (`wa_` + 32-byte hex)
+  - [x] Hash API Key sebelum disimpan (SHA-256)
+  - [x] Return API Key plain-text HANYA sekali (saat dibuat)
+- [x] `GET /api/internal/api-keys` — list API keys milik user
+- [x] `DELETE /api/internal/api-keys/:id` — nonaktifkan API Key (soft-delete)
 
 ### 2.5 Webhook Delivery
-- [ ] Buat `WebhookService` module
-- [ ] Implementasi `deliverWebhook(webhookUrl, payload)` menggunakan `axios`
-- [ ] Implementasi retry logic (3x retry, exponential backoff)
-- [ ] Log hasil pengiriman webhook (sukses/gagal) ke `message_logs`
+- [x] Buat `WebhookService` module (`src/services/webhookService.js`)
+- [x] Implementasi `deliver(messageLogId, webhookUrl, payload)` menggunakan `axios`
+- [x] Implementasi retry logic (3x retry, exponential backoff: 1s → 5s → 15s)
+- [x] Log setiap attempt ke tabel `webhook_deliveries` (status, HTTP status, error)
+- [x] Update `message_logs.webhook_status` setelah delivery
 
 ---
 
 ## 🎨 PHASE 3 — Frontend Development
 
 ### 3.1 Setup & Routing
-- [ ] Setup React Router (`react-router-dom`) dengan route:
-  - `/login` — halaman login
-  - `/register` — halaman registrasi
-  - `/dashboard` — halaman utama (protected)
-  - `/dashboard/sessions` — manajemen sesi
-  - `/dashboard/logs` — activity log
-  - `/dashboard/settings` — API Key & Webhook settings
-- [ ] Implementasi Protected Route (redirect ke `/login` jika belum auth)
-- [ ] Setup Supabase client (`createClient`)
-- [ ] Setup axios instance dengan base URL backend & interceptor auth header
+- [x] Setup React Router (`react-router-dom`) dengan route:
+  - [x] `/login` — halaman login
+  - [x] `/register` — halaman registrasi
+  - [x] `/dashboard` — halaman utama (protected)
+  - [x] `/dashboard/sessions` — manajemen sesi
+  - [x] `/dashboard/logs` — activity log
+  - [x] `/dashboard/settings` — API Key & Webhook settings
+- [x] Implementasi Protected Route (redirect ke `/login` jika belum auth)
+- [x] Setup Supabase client (`createClient`)
+- [x] Setup axios instance dengan base URL backend & interceptor auth header
 
 ### 3.2 Auth Pages
-- [ ] Halaman **Login** — form email + password (Supabase Auth)
-- [ ] Halaman **Register** — form email + password + konfirmasi
-- [ ] Implementasi `signIn()`, `signUp()`, `signOut()` via Supabase
-- [ ] Simpan & manage auth state (Supabase session listener)
+- [x] Halaman **Login** — form email + password (Supabase Auth)
+- [x] Halaman **Register** — form email + password + konfirmasi
+- [x] Implementasi `signIn()`, `signUp()`, `signOut()` via Supabase
+- [x] Simpan & manage auth state (Supabase session listener)
 
 ### 3.3 Dashboard — Session Management
-- [ ] Tampilkan daftar sesi WhatsApp (card per sesi) dengan status badge
-- [ ] Tombol **"Tambah Sesi Baru"** → buat sesi & tampilkan modal QR
-- [ ] **Modal QR Code** — render QR menggunakan `qrcode.react`
-  - [ ] Subscribe ke Socket.io event `qr` untuk update QR real-time
-  - [ ] Auto-close modal saat event `ready` diterima
-- [ ] Status badge real-time (update via Socket.io events)
-- [ ] Tombol **"Hapus Sesi"** dengan konfirmasi dialog
-- [ ] Tombol **Copy Session ID** untuk digunakan di API
+- [x] Tampilkan daftar sesi WhatsApp (card per sesi) dengan status badge
+- [x] Tombol **"Tambah Sesi Baru"** → buat sesi & tampilkan modal QR
+- [x] **Modal QR Code** — render QR menggunakan `qrcode.react`
+  - [x] Subscribe ke Socket.io event `qr` untuk update QR real-time
+  - [x] Auto-close modal saat event `ready` diterima
+- [x] Status badge real-time (update via Socket.io events)
+- [x] Tombol **"Hapus Sesi"** dengan konfirmasi dialog
+- [x] Tombol **Copy Session ID** untuk digunakan di API
+- [x] Tombol **Reconnect** untuk sesi yang terputus
 
 ### 3.4 Dashboard — Activity Log
-- [ ] Tampilkan tabel log pesan (inbound & outbound)
-- [ ] Kolom: Waktu, Sesi, Arah, Nomor, Tipe, Status
-- [ ] Filter berdasarkan sesi, arah (inbound/outbound), tanggal
-- [ ] Pagination (infinite scroll atau paginasi halaman)
+- [x] Tampilkan tabel log pesan (inbound & outbound)
+- [x] Kolom: Waktu, Sesi, Arah, Nomor, Tipe, Status
+- [x] Filter berdasarkan sesi, arah (inbound/outbound), tanggal
+- [x] Pagination (infinite scroll atau paginasi halaman)
 
 ### 3.5 Dashboard — Settings
-- [ ] Tampilkan daftar API Key dengan label & status
-- [ ] Tombol **"Generate API Key Baru"** (tampilkan key plain-text sekali)
-- [ ] Tombol **"Revoke"** untuk menonaktifkan API Key
-- [ ] Form **konfigurasi Webhook URL** per sesi
-- [ ] Tombol **"Test Webhook"** (kirim dummy payload ke URL)
+- [x] Tampilkan daftar API Key dengan label & status
+- [x] Tombol **"Generate API Key Baru"** (tampilkan key plain-text sekali)
+- [x] Tombol **"Revoke"** untuk menonaktifkan API Key
+- [x] Form **konfigurasi Webhook URL** per sesi
+- [x] Tombol **"Test Webhook"** (kirim dummy payload ke URL)
 
 ### 3.6 Socket.io Integration
-- [ ] Setup `socket.io-client` koneksi ke backend
-- [ ] Emit `join_session` saat user membuka dashboard sesi tertentu
-- [ ] Handle event `qr` → update state QR Code
-- [ ] Handle event `ready` → update status sesi di UI
-- [ ] Handle event `authenticated` → update status sesi di UI
-- [ ] Handle event `auth_failure` → tampilkan error & prompt scan ulang
-- [ ] Handle event `disconnected` → update status sesi di UI + notifikasi toast
+- [x] Setup `socket.io-client` koneksi ke backend
+- [x] Emit `join_session` saat user membuka dashboard sesi tertentu
+- [x] Handle event `qr` → update state QR Code
+- [x] Handle event `ready` → update status sesi di UI
+- [x] Handle event `authenticated` → update status sesi di UI
+- [x] Handle event `auth_failure` → tampilkan error & prompt scan ulang
+- [x] Handle event `disconnected` → update status sesi di UI + notifikasi toast
 
 ---
 
@@ -191,8 +200,8 @@
 
 | Phase | Total Task | Selesai | Progress |
 |---|---|---|---|
-| Phase 1 — Setup | ~17 | 0 | 0% |
-| Phase 2 — Backend | ~40 | 0 | 0% |
-| Phase 3 — Frontend | ~30 | 0 | 0% |
+| Phase 1 — Setup | ~17 | 10 | ~59% |
+| Phase 2 — Backend | ~40 | 40 | ✅ 100% |
+| Phase 3 — Frontend | ~30 | 30 | ✅ 100% |
 | Phase 4 — Deployment | ~12 | 0 | 0% |
-| **Total** | **~99** | **0** | **0%** |
+| **Total** | **~99** | **80** | **~81%** |

@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     chromium-sandbox \
     ca-certificates \
+    curl \
     fonts-liberation \
     libasound2 \
     libatk-bridge2.0-0 \
@@ -49,9 +50,4 @@ RUN mkdir -p .wwebjs_auth && chmod 777 .wwebjs_auth
 # Port yang di-expose
 EXPOSE 3000
 
-# Jalankan sebagai user non-root untuk keamanan
-RUN groupadd -r appuser && useradd -r -g appuser appuser \
-    && chown -R appuser:appuser /app
-USER appuser
-
-CMD ["node", "src/server.js"]
+CMD ["node", "src/index.js"]
