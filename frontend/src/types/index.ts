@@ -15,6 +15,8 @@ export interface Session {
   webhook_url: string | null;
   last_connected_at: string | null;
   created_at: string;
+  phone_number: string | null;
+  updated_at: string | null;
 }
 
 export type MessageDirection = 'inbound' | 'outbound';
