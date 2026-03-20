@@ -6,12 +6,12 @@ const supabase = require('../config/supabase');
 // CONSTANTS
 // ============================================================
 
-const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
-const DEFAULT_MODEL      = 'qwen2.5:7b';
-const DEFAULT_MAX_TOKENS = 500;
-const MAX_HISTORY_LENGTH = 20;       // Maksimal pesan dalam history per kontak
-const AI_REPLY_DELAY_MS  = 1500;     // Delay natural sebelum kirim balasan (ms)
-const OLLAMA_TIMEOUT_MS  = 90_000;   // Timeout request ke Ollama (30 detik)
+const DEFAULT_OLLAMA_URL       = 'http://localhost:11434';
+const DEFAULT_MODEL            = 'qwen2.5:7b';
+const DEFAULT_MAX_TOKENS       = 500;
+const MAX_HISTORY_LENGTH       = 20;
+const AI_REPLY_DELAY_MS        = 1500;
+const OLLAMA_TIMEOUT_MS        = 90_000; // 15 detik
 
 const DEFAULT_FALLBACK_MESSAGE = 'Maaf, saya sedang tidak bisa memproses pesan Anda saat ini. Tim kami akan segera menghubungi Anda.';
 
@@ -22,9 +22,15 @@ const DEFAULT_FALLBACK_MESSAGE = 'Maaf, saya sedang tidak bisa memproses pesan A
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Ambil identifier kontak untuk keperluan logging & history.
+ * Tidak digunakan untuk kirim pesan (pakai msg.reply() saja).
+ */
+const getContactNumber = (msg) => {
+  return msg.from || msg.id?.remote || 'unknown';
+};
+
+/**
  * Buat system prompt dari konteks yang diberikan user.
- * @param {string} context - Informasi bisnis dari user
- * @returns {string}
  */
 const buildSystemPrompt = (context) => {
   const base = [
@@ -46,13 +52,6 @@ const buildSystemPrompt = (context) => {
 // DATABASE HELPERS
 // ============================================================
 
-/**
- * Ambil konfigurasi AI untuk sesi tertentu dari tabel ai_configs.
- * Mengembalikan null jika tidak ditemukan atau is_enabled = false.
- *
- * @param {string} sessionId - UUID sesi
- * @returns {Promise<Object|null>}
- */
 const getAIConfig = async (sessionId) => {
   const { data, error } = await supabase
     .from('ai_configs')
@@ -61,7 +60,6 @@ const getAIConfig = async (sessionId) => {
     .single();
 
   if (error) {
-    // PGRST116 = row not found, bukan error kritis
     if (error.code !== 'PGRST116') {
       console.error(`[AIReplyService] Gagal fetch ai_config untuk ${sessionId}:`, error.message);
     }
@@ -73,14 +71,6 @@ const getAIConfig = async (sessionId) => {
   return data;
 };
 
-/**
- * Ambil history percakapan AI untuk kontak tertentu di sesi tertentu.
- * Jika belum ada, kembalikan array kosong.
- *
- * @param {string} sessionId     - UUID sesi
- * @param {string} contactNumber - Nomor WA kontak
- * @returns {Promise<Array>}
- */
 const getChatHistory = async (sessionId, contactNumber) => {
   const { data, error } = await supabase
     .from('ai_chat_histories')
@@ -99,17 +89,7 @@ const getChatHistory = async (sessionId, contactNumber) => {
   return Array.isArray(data?.messages) ? data.messages : [];
 };
 
-/**
- * Simpan/update history percakapan AI ke tabel ai_chat_histories.
- * Menggunakan UPSERT berdasarkan (session_id, contact_number).
- * History dibatasi MAX_HISTORY_LENGTH pesan terakhir.
- *
- * @param {string} sessionId     - UUID sesi
- * @param {string} contactNumber - Nomor WA kontak
- * @param {Array}  messages      - Array history [{role, content}, ...]
- */
 const saveChatHistory = async (sessionId, contactNumber, messages) => {
-  // Batasi history agar tidak membebani context window Ollama
   const trimmedMessages = messages.slice(-MAX_HISTORY_LENGTH);
 
   const { error } = await supabase
@@ -129,15 +109,7 @@ const saveChatHistory = async (sessionId, contactNumber, messages) => {
   }
 };
 
-/**
- * Catat pesan balasan AI ke tabel message_logs.
- * Menggunakan source = 'ai_reply' untuk membedakan dari API/manual.
- *
- * @param {string} sessionId - UUID sesi
- * @param {string} to        - Nomor WA tujuan
- * @param {string} replyText - Teks balasan dari AI
- */
-const logAIReply = async (sessionId, to, replyText) => {
+const logAIReply = async (sessionId, to, replyText, isFallback = false) => {
   const { error } = await supabase.from('message_logs').insert({
     session_id:   sessionId,
     direction:    'outbound',
@@ -145,7 +117,7 @@ const logAIReply = async (sessionId, to, replyText) => {
     type:         'text',
     status:       'sent',
     source:       'ai_reply',
-    payload:      { text: replyText, isFallback: isFallback },
+    payload:      { text: replyText, is_fallback: isFallback },
   });
 
   if (error) {
@@ -157,18 +129,10 @@ const logAIReply = async (sessionId, to, replyText) => {
 // OLLAMA REQUEST
 // ============================================================
 
-/**
- * Kirim request ke Ollama API /api/chat dan ambil respons teks.
- *
- * @param {Object} config   - Konfigurasi dari ai_configs
- * @param {string} system   - System prompt
- * @param {Array}  history  - History percakapan [{role, content}, ...]
- * @returns {Promise<string|null>} - Teks balasan AI, atau null jika gagal
- */
 const requestOllama = async (config, system, history) => {
-  const ollamaUrl  = config.ollama_url || DEFAULT_OLLAMA_URL;
-  const model      = config.model      || DEFAULT_MODEL;
-  const maxTokens  = config.max_tokens || DEFAULT_MAX_TOKENS;
+  const ollamaUrl = config.ollama_url || DEFAULT_OLLAMA_URL;
+  const model     = config.model      || DEFAULT_MODEL;
+  const maxTokens = config.max_tokens || DEFAULT_MAX_TOKENS;
 
   const controller = new AbortController();
   const timeoutId  = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
@@ -217,19 +181,9 @@ const requestOllama = async (config, system, history) => {
 };
 
 // ============================================================
-// GUARDS — Pesan yang tidak perlu dibalas AI
+// GUARDS
 // ============================================================
 
-/**
- * Cek apakah pesan perlu di-skip (tidak perlu dibalas AI).
- * - Pesan dari diri sendiri (fromMe)
- * - Pesan dari grup (format: xxxxxx@g.us)
- * - Pesan broadcast/status
- * - Pesan non-teks (media, sticker, dll) yang body-nya kosong
- *
- * @param {Object} msg - Message object dari whatsapp-web.js
- * @returns {boolean}
- */
 const shouldSkip = (msg) => {
   if (msg.fromMe)                          return true;
   if (msg.from === 'status@broadcast')     return true;
@@ -242,49 +196,29 @@ const shouldSkip = (msg) => {
 // MAIN — getAIReply
 // ============================================================
 
-/**
- * Proses utama: terima pesan masuk, cek konfigurasi AI sesi,
- * ambil history, kirim ke Ollama, simpan history, kembalikan balasan.
- *
- * @param {string} sessionId - UUID sesi
- * @param {Object} msg       - Message object dari whatsapp-web.js
- * @returns {Promise<string|null>} - Teks balasan AI atau null jika skip/error
- */
 const getAIReply = async (sessionId, msg) => {
-  // --- Guard: abaikan pesan yang tidak perlu dibalas ---
   if (shouldSkip(msg)) return null;
 
-  // --- Ambil konfigurasi AI (juga cek is_enabled) ---
   const config = await getAIConfig(sessionId);
   if (!config) return null;
 
-  const contactNumber = msg.from;
+  const contactNumber = getContactNumber(msg);
   const incomingText  = msg.body.trim();
   const fallback      = config.fallback_message || DEFAULT_FALLBACK_MESSAGE;
 
   console.log(`[AIReplyService] Memproses pesan dari ${contactNumber} di sesi ${sessionId}`);
 
-  // --- Ambil history percakapan kontak ini ---
-  const history = await getChatHistory(sessionId, contactNumber);
-
-  // --- Tambahkan pesan baru ke history ---
-  const updatedHistory = [
-    ...history,
-    { role: 'user', content: incomingText },
-  ];
-
-  // --- Bangun system prompt dari konteks user ---
-  const systemPrompt = buildSystemPrompt(config.context);
-
-  // --- Request ke Ollama ---
-  const aiReply = await requestOllama(config, systemPrompt, updatedHistory);
+  const history        = await getChatHistory(sessionId, contactNumber);
+  const updatedHistory = [...history, { role: 'user', content: incomingText }];
+  const systemPrompt   = buildSystemPrompt(config.context);
+  const aiReply        = await requestOllama(config, systemPrompt, updatedHistory);
 
   if (!aiReply) {
-    console.warn(`[AIReplyService] Tidak ada balasan dari Ollama untuk sesi ${sessionId}`);
+    console.warn(`[AIReplyService] AI gagal, menggunakan fallback untuk sesi ${sessionId}`);
     return { text: fallback, isFallback: true };
   }
 
-  // --- Simpan history yang sudah diupdate (termasuk balasan AI) ---
+  // Simpan history hanya jika AI berhasil (bukan fallback)
   await saveChatHistory(sessionId, contactNumber, [
     ...updatedHistory,
     { role: 'assistant', content: aiReply },
@@ -296,70 +230,62 @@ const getAIReply = async (sessionId, msg) => {
 };
 
 // ============================================================
-// SEND WITH DELAY — Wrapper untuk kirim + log
+// HANDLE INCOMING
 // ============================================================
 
 /**
- * Kirim balasan AI ke kontak via WhatsApp client dengan delay natural,
- * lalu catat ke message_logs.
+ * Entry point utama yang dipanggil dari sessionManager.js.
  *
- * Gunakan fungsi ini di handler 'message' pada sessionManager.js
- * sebagai fire-and-forget (gunakan .catch(console.error)).
+ * Menggunakan msg.reply() — BUKAN client.sendMessage() — agar
+ * kompatibel dengan semua format ID WhatsApp termasuk @lid
+ * yang digunakan pada perangkat multi-device.
  *
- * Contoh penggunaan:
- *   aiReplyService
- *     .handleIncomingMessage(sessionId, msg, client)
- *     .catch(console.error);
- *
- * @param {string} sessionId - UUID sesi
- * @param {Object} msg       - Message object dari whatsapp-web.js
- * @param {Object} client    - WhatsApp Client instance
+ * msg.reply() secara internal sudah tahu ke mana harus membalas
+ * tanpa perlu kita resolve nomor kontak secara manual.
  */
-const handleIncomingMessage = async (sessionId, msg, client) => {
-  const aiReply = await getAIReply(sessionId, msg);
-  if (!aiReply) return;
+const handleIncomingMessage = async (sessionId, msg) => { // client tidak diperlukan lagi
+  const result = await getAIReply(sessionId, msg);
+  if (!result) return;
 
-  // Typing indicator — non-critical, jangan sampai crash flow utama
+  const { text: replyText, isFallback } = result;
+  const contactNumber = getContactNumber(msg);
+
+  // Typing indicator — non-critical
   try {
     const chat = await msg.getChat();
     await chat.sendStateTyping();
 
-    // Dinamis sesuai panjang teks: ~50ms/karakter, min 1.5s, max 5s
     const typingDuration = isFallback
-      ? 1500  // fallback cukup delay singkat
-      : Math.min(Math.max(aiReply.length * 50, 1500), 5000);
-    await sleep(typingDuration);
+      ? 1500
+      : Math.min(Math.max(replyText.length * 50, 1500), 5000);
 
+    await sleep(typingDuration);
     await chat.clearState();
   } catch (err) {
     console.warn(`[AIReplyService] Typing state gagal (non-critical):`, err.message);
-    await sleep(AI_REPLY_DELAY_MS); // fallback ke delay default jika typing gagal
+    await sleep(AI_REPLY_DELAY_MS);
   }
 
   try {
-    await client.sendMessage(msg.from, aiReply);
-    await logAIReply(sessionId, msg.from, aiReply);
+    // ✅ msg.reply() — kompatibel dengan @lid, @c.us, semua format
+    await msg.reply(replyText);
+
+    await logAIReply(sessionId, contactNumber, replyText, isFallback);
+
     console.log(
       isFallback
-        ? `[AIReplyService] ⚠ Fallback terkirim ke ${msg.from}`
-        : `[AIReplyService] ✓ AI reply terkirim ke ${msg.from}`
+        ? `[AIReplyService] ⚠ Fallback terkirim ke ${contactNumber}`
+        : `[AIReplyService] ✓ AI reply terkirim ke ${contactNumber}`
     );
   } catch (err) {
-    console.error(`[AIReplyService] Gagal kirim balasan AI ke ${msg.from}:`, err.message);
+    console.error(`[AIReplyService] Gagal kirim balasan AI ke ${contactNumber}:`, err.message);
   }
 };
 
 // ============================================================
-// UTILITY — Reset history kontak tertentu
+// UTILITY
 // ============================================================
 
-/**
- * Hapus history percakapan AI untuk kontak tertentu di sesi tertentu.
- * Berguna jika user ingin memulai percakapan baru dari awal.
- *
- * @param {string} sessionId
- * @param {string} contactNumber
- */
 const clearChatHistory = async (sessionId, contactNumber) => {
   const { error } = await supabase
     .from('ai_chat_histories')
@@ -376,12 +302,6 @@ const clearChatHistory = async (sessionId, contactNumber) => {
   return true;
 };
 
-/**
- * Hapus semua history percakapan AI untuk satu sesi.
- * Dipanggil saat sesi dihapus.
- *
- * @param {string} sessionId
- */
 const clearAllHistoriesBySession = async (sessionId) => {
   const { error } = await supabase
     .from('ai_chat_histories')
