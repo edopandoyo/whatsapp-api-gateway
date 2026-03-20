@@ -1,0 +1,129 @@
+name: Deploy WebWA Gateway
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Bisa trigger manual dari GitHub UI
+
+jobs:
+  # ============================================================
+  # JOB 1 — Build & Push Image ke GitHub Container Registry
+  # ============================================================
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Login ke GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ---------- Build Backend ----------
+      - name: Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/webwa-backend:latest
+          shm-size: 1g
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      # ---------- Build Frontend ----------
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/webwa-frontend:latest
+          build-args: |
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  # ============================================================
+  # JOB 2 — Deploy ke VPS
+  # ============================================================
+  deploy:
+    name: Deploy ke VPS
+    runs-on: ubuntu-latest
+    needs: build # Tunggu build selesai dulu
+
+    steps:
+      - name: Checkout kode (untuk docker-compose.yml)
+        uses: actions/checkout@v4
+
+      - name: Copy docker-compose ke VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "docker-compose.yml"
+          target: "/opt/apps/webwa"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd /opt/apps/webwa
+
+            echo "🔐 Login ke GHCR..."
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io \
+              -u ${{ github.actor }} --password-stdin
+
+            echo "📝 Update .env file..."
+            cat > .env << 'EOF'
+            NODE_ENV=production
+            SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+            SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            RATE_LIMIT_MAX=60
+            RATE_LIMIT_WINDOW_MS=60000
+            EOF
+
+            echo "📦 Pull image terbaru..."
+            docker compose pull
+
+            echo "🚀 Restart container (zero-downtime)..."
+            # Restart backend dulu, tunggu healthy, baru frontend
+            docker compose up -d --no-deps backend
+
+            echo "⏳ Menunggu backend healthy..."
+            timeout 120 bash -c \
+              'until docker inspect webwa-backend \
+              --format="{{.State.Health.Status}}" | grep -q "healthy"; \
+              do sleep 5; echo "  masih menunggu..."; done'
+
+            docker compose up -d --no-deps frontend
+
+            echo "🧹 Bersihkan image lama..."
+            docker image prune -f
+
+            echo "✅ Deploy selesai!"
+            docker compose ps

@@ -17,7 +17,11 @@ const NAV_ITEMS = [
   { to: '/dashboard/documentations', icon: BookOpen, label: 'Dokumentasi' },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  onNavClick?: () => void;
+}
+
+export default function Sidebar({ onNavClick }: SidebarProps) {
   const { user, signOut } = useAuth();
   const { connected } = useSocket();
   const navigate = useNavigate();
@@ -62,6 +66,7 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `${styles.navItem} ${isActive ? styles.navItemActive : ''}`
             }
+            onClick={onNavClick}
           >
             <Icon size={17} />
             <span>{label}</span>

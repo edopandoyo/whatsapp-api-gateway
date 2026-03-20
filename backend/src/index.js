@@ -30,7 +30,7 @@ const server = http.createServer(app);
 // ============================================================
 const io = new Server(server, {
   cors: {
-    origin:      env.FRONTEND_URL,
+    origin:      env.CORS_ORIGINS,
     credentials: true,
   },
 });
@@ -105,7 +105,7 @@ io.on('connection', (socket) => {
 // ============================================================
 app.use(helmet());
 app.use(cors({
-  origin:      env.FRONTEND_URL,
+  origin:      env.CORS_ORIGINS,
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));   // 50 MB: cover base64 media
