@@ -1,0 +1,22 @@
+/* ─────────────────────────────────────────────
+   Tambahkan styles ini ke SessionsPage.module.css
+   yang sudah ada (append ke bawah file)
+───────────────────────────────────────────── */
+
+/* Card highlighted saat drawer terbuka */
+.cardActive {
+  border-color: var(--c-brand-500, #22c55e) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-brand-500, #22c55e) 30%, transparent);
+}
+
+/* AI Config action button */
+.detailBtn {
+  flex: 1;
+  justify-content: flex-start;
+  color: var(--c-brand-400, #4ade80) !important;
+  border-color: color-mix(in srgb, var(--c-brand-500, #22c55e) 30%, var(--c-border, #2a2a2a)) !important;
+}
+
+.detailBtn:hover {
+  background: color-mix(in srgb, var(--c-brand-500, #22c55e) 8%, var(--c-surface-1, #1a1a1a)) !important;
+}

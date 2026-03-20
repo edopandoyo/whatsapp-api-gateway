@@ -37,6 +37,8 @@ services:
     volumes:
       # Persist sesi WA agar tidak scan QR ulang setiap restart
       - wa_sessions:/app/.wwebjs_auth
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - webwa-network
     healthcheck:

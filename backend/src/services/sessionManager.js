@@ -4,6 +4,7 @@ const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const supabase      = require('../config/supabase');
 const env           = require('../config/env');
 const webhookService = require('./webhookService');
+const aiReplyService = require('./aiReplyService');
 
 // Map sessionId → Client instance
 // Dipertahankan selama proses server hidup
@@ -193,6 +194,7 @@ const createSession = (sessionId, io, retryCount = 0) => {
   // EVENT: Pesan masuk
   // ----------------------------------------------------------
   client.on('message', async (msg) => {
+    
     // Abaikan pesan broadcast/status WhatsApp
     if (msg.from === 'status@broadcast') return;
 
@@ -239,6 +241,10 @@ const createSession = (sessionId, io, retryCount = 0) => {
         .deliver(messageLogId, sessionData.webhook_url, webhookPayload)
         .catch(console.error);
     }
+
+    aiReplyService
+    .handleIncomingMessage(sessionId, msg, client)
+    .catch(console.error);
   });
 
   sessions.set(sessionId, client);
@@ -294,6 +300,7 @@ const deleteSession = async (sessionId) => {
     console.warn(`[SessionManager] destroy() error untuk ${sessionId}:`, err.message);
   }
 
+  await aiReplyService.clearAllHistoriesBySession(sessionId);
   sessions.delete(sessionId);
   console.log(`[SessionManager] Sesi dihapus: ${sessionId}`);
 };

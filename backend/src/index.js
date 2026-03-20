@@ -18,6 +18,7 @@ const sessionManager = require('./services/sessionManager');
 const sessionsRouterFactory  = require('./routes/sessions');
 const messagesRouterFactory  = require('./routes/messages');
 const apiKeysRouter          = require('./routes/apiKeys');
+const aiConfigRouter         = require('./routes/aiConfig');
 
 // ============================================================
 // EXPRESS + HTTP SERVER
@@ -179,6 +180,11 @@ internalRouter.get('/messages', async (req, res, next) => {
       query = query.eq('status', status);
     }
 
+    const source = req.query.source;  // 'ai_reply' | 'api' | 'manual'
+if (['ai_reply', 'api', 'manual'].includes(source)) {
+  query = query.eq('source', source);
+}
+
     const { data, error, count } = await query;
     if (error) throw new Error(error.message);
 
@@ -194,6 +200,7 @@ internalRouter.get('/messages', async (req, res, next) => {
 
 internalRouter.use('/sessions', sessionsRouterFactory(io));
 internalRouter.use('/sessions', messagesRouterFactory(io));   // /:sessionId/messages/*
+internalRouter.use('/sessions/:sessionId/ai-config', aiConfigRouter);
 internalRouter.use('/api-keys', apiKeysRouter);
 
 app.use('/api/internal', internalRouter);

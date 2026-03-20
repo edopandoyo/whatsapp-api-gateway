@@ -165,22 +165,22 @@
 ## 🐳 PHASE 4 — Deployment
 
 ### 4.1 Docker & VPS
-- [ ] Test `docker-compose up --build` di lokal
-- [ ] Pastikan sesi WA tidak hilang saat `docker-compose restart`
-- [ ] Setup VPS (Ubuntu 22.04) — install Docker & Docker Compose
-- [ ] Upload project ke VPS (via SCP atau Git)
-- [ ] Konfigurasi file `.env` di VPS
-- [ ] Jalankan `docker-compose up -d` di VPS
-- [ ] Setup **Nginx reverse proxy** di host VPS (opsional, port 80/443)
-- [ ] Setup **SSL/TLS** dengan Let's Encrypt + Certbot
+- [x] Test `docker-compose up --build` di lokal
+- [x] Pastikan sesi WA tidak hilang saat `docker-compose restart`
+- [x] Setup VPS (Ubuntu 22.04) — install Docker & Docker Compose
+- [x] Upload project ke VPS (via SCP atau Git)
+- [x] Konfigurasi file `.env` di VPS
+- [x] Jalankan `docker-compose up -d` di VPS
+- [x] Setup **Nginx reverse proxy** di host VPS (opsional, port 80/443)
+- [x] Setup **SSL/TLS** dengan Let's Encrypt + Certbot
 
 ### 4.2 Testing & QA
-- [ ] Test end-to-end: scan QR → kirim pesan via API → cek log di dashboard
-- [ ] Test webhook delivery dengan endpoint lokal (ngrok / Webhook.site)
-- [ ] Test penanganan sesi putus (disconnect ponsel) & reconnect
-- [ ] Test rate limiter (pastikan request berlebih ditolak)
-- [ ] Test RLS Supabase (user A tidak bisa akses data user B)
-- [ ] Test API Key authentication (valid key vs invalid key)
+- [x] Test end-to-end: scan QR → kirim pesan via API → cek log di dashboard
+- [x] Test webhook delivery dengan endpoint lokal (ngrok / Webhook.site)
+- [x] Test penanganan sesi putus (disconnect ponsel) & reconnect
+- [x] Test rate limiter (pastikan request berlebih ditolak)
+- [x] Test RLS Supabase (user A tidak bisa akses data user B)
+- [x] Test API Key authentication (valid key vs invalid key)
 
 ---
 

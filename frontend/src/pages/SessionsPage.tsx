@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, QrCode, Trash2, RotateCcw, Copy, Check,
-  Loader2, Smartphone, Globe,
+  Loader2, Smartphone, Globe, Bot, ChevronRight,
 } from 'lucide-react';
 import api from '../lib/api';
 import type { Session } from '../types';
 import StatusBadge from '../components/StatusBadge';
 import QrModal from '../components/QrModal';
+import SessionDetailDrawer from '../components/SessionDetailDrawer';
 import toast from 'react-hot-toast';
 import styles from './SessionsPage.module.css';
 
@@ -15,6 +16,9 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [qrSession, setQrSession] = useState<Session | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // ── Drawer state ──────────────────────────
+  const [detailSession, setDetailSession] = useState<Session | null>(null);
 
   // Dialog state
   const [showAdd, setShowAdd] = useState(false);
@@ -43,7 +47,6 @@ export default function SessionsPage() {
       setSessions(prev => [data.data, ...prev]);
       toast.success('Sesi berhasil dibuat!');
       setShowAdd(false); setNewName(''); setNewHook('');
-      // Buka QR langsung
       setQrSession(data.data);
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? 'Gagal membuat sesi');
@@ -57,6 +60,7 @@ export default function SessionsPage() {
     try {
       await api.delete(`/api/internal/sessions/${id}`);
       setSessions(prev => prev.filter(s => s.id !== id));
+      if (detailSession?.id === id) setDetailSession(null);
       toast.success('Sesi dihapus');
     } catch {
       toast.error('Gagal menghapus sesi');
@@ -142,7 +146,10 @@ export default function SessionsPage() {
       ) : (
         <div className={styles.grid}>
           {sessions.map(sess => (
-            <div key={sess.id} className={styles.card}>
+            <div
+              key={sess.id}
+              className={`${styles.card} ${detailSession?.id === sess.id ? styles.cardActive : ''}`}
+            >
               {/* Card Header */}
               <div className={styles.cardTop}>
                 <div className={styles.sessionWrap}>
@@ -179,10 +186,13 @@ export default function SessionsPage() {
                   onClick={() => copySessionId(sess.id)}
                   title="Salin Session ID"
                 >
-                  {copiedId === sess.id ? <Check size={14} color="var(--c-success)" /> : <Copy size={14} />}
+                  {copiedId === sess.id
+                    ? <Check size={14} color="var(--c-success)" />
+                    : <Copy size={14} />
+                  }
                   {copiedId === sess.id ? 'Tersalin' : 'Salin ID'}
                 </button>
-                {(sess.status !== 'connected') && (
+                {sess.status !== 'connected' && (
                   <button
                     className={styles.actionBtn}
                     onClick={() => setQrSession(sess)}
@@ -202,6 +212,18 @@ export default function SessionsPage() {
                     Ulang
                   </button>
                 )}
+
+                {/* ── NEW: Detail / AI Config button ── */}
+                <button
+                  className={`${styles.actionBtn} ${styles.detailBtn}`}
+                  onClick={() => setDetailSession(sess)}
+                  title="Detail & AI Config"
+                >
+                  <Bot size={14} />
+                  AI Config
+                  <ChevronRight size={12} style={{ marginLeft: 'auto' }} />
+                </button>
+
                 <button
                   className={`${styles.actionBtn} ${styles.danger}`}
                   onClick={() => deleteSession(sess.id)}
@@ -221,6 +243,14 @@ export default function SessionsPage() {
           session={qrSession}
           onClose={() => setQrSession(null)}
           onReady={fetchSessions}
+        />
+      )}
+
+      {/* ── NEW: Session Detail Drawer ── */}
+      {detailSession && (
+        <SessionDetailDrawer
+          session={detailSession}
+          onClose={() => setDetailSession(null)}
         />
       )}
     </div>
