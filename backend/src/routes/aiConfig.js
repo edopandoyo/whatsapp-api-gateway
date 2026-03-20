@@ -89,7 +89,9 @@ router.post('/', async (req, res, next) => {
       ollama_url = DEFAULT_CONFIG.ollama_url,
       model      = DEFAULT_CONFIG.model,
       max_tokens = DEFAULT_CONFIG.max_tokens,
-      fallback_message = 'Maaf, saya sedang tidak bisa memproses pesan Anda saat ini.'
+      fallback_message = 'Maaf, saya sedang tidak bisa memproses pesan Anda saat ini.',
+      provider   = 'ollama',
+      groq_api_key = '',
     } = req.body;
 
     // Validasi sederhana
@@ -112,11 +114,13 @@ router.post('/', async (req, res, next) => {
           model:      (model || DEFAULT_CONFIG.model).trim(),
           max_tokens: parsedMaxTokens,
           fallback_message: fallback_message.trim(),
+          provider: provider,
+          groq_api_key:    groq_api_key.trim() || null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'session_id' }
       )
-      .select('id, is_enabled, context, ollama_url, model, max_tokens, updated_at')
+      .select('id, is_enabled, context, ollama_url, model, max_tokens, fallback_message, provider, groq_api_key, updated_at')
       .single();
 
     if (error) throw Object.assign(new Error(error.message), { statusCode: 500 });

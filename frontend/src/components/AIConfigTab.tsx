@@ -20,6 +20,8 @@ interface AIConfig {
   model: string;
   max_tokens: number;
   fallback_message?: string;
+  provider?: 'ollama' | 'groq' | 'auto';
+  groq_api_key?: string;
 }
 
 interface AILog {
@@ -123,6 +125,8 @@ export default function AIConfigTab({ session }: { session: Session }) {
         model: config.model.trim() || 'qwen2.5:7b',
         max_tokens: Number(config.max_tokens) || 500,
         fallback_message: config.fallback_message?.trim() || '',
+        provider: config.provider || 'ollama',   // ← tambahkan
+        groq_api_key: config.groq_api_key || '',
       });
       toast.success('Konfigurasi AI disimpan');
     } catch {
@@ -255,6 +259,55 @@ export default function AIConfigTab({ session }: { session: Session }) {
               />
               <span className={styles.hint}>Semakin kecil = respons lebih singkat &amp; cepat</span>
             </div>
+
+            {/* Provider selector */}
+            <div className={styles.field} style={{ gridColumn: '1 / -1' }}>
+              <label>Provider AI</label>
+              <select
+                value={config.provider ?? 'ollama'}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  provider: e.target.value as AIConfig['provider']
+                }))}
+                style={{
+                  padding: '7px 10px',
+                  background: 'var(--c-surface-1)',
+                  border: '1px solid var(--c-border)',
+                  borderRadius: 6,
+                  color: 'var(--c-text-1)',
+                  fontSize: 13,
+                }}
+              >
+                <option value="ollama">Ollama (Lokal)</option>
+                <option value="groq">Groq API</option>
+                <option value="auto">Auto (Groq → Fallback Ollama)</option>
+              </select>
+              <span className={styles.hint}>
+                Mode Auto: coba Groq dulu, otomatis pakai Ollama jika Groq gagal/limit
+              </span>
+            </div>
+
+            {/* Groq API Key — hanya muncul jika provider groq atau auto */}
+            {(config.provider === 'groq' || config.provider === 'auto') && (
+              <div className={styles.field} style={{ gridColumn: '1 / -1' }}>
+                <label>Groq API Key</label>
+                <input
+                  type="password"
+                  value={config.groq_api_key ?? ''}
+                  onChange={e => setConfig(prev => ({ ...prev, groq_api_key: e.target.value }))}
+                  placeholder="gsk_..."
+                  autoComplete="off"
+                />
+                <span className={styles.hint}>
+                  Daftar gratis di{' '}
+                  <a href="https://console.groq.com" target="_blank" rel="noreferrer"
+                    style={{ color: 'var(--c-brand-400)' }}>
+                    console.groq.com
+                  </a>
+                  {' '}— 14.400 request/hari gratis
+                </span>
+              </div>
+            )}
           </div>
         )}
 

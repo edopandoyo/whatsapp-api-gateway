@@ -7,11 +7,15 @@ const supabase = require('../config/supabase');
 // ============================================================
 
 const DEFAULT_OLLAMA_URL       = 'http://localhost:11434';
-const DEFAULT_MODEL            = 'qwen2.5:7b';
+const DEFAULT_MODEL_OLLAMA     = 'qwen2.5:7b';
+const DEFAULT_MODEL_GROQ       = 'llama-3.3-70b-versatile';
 const DEFAULT_MAX_TOKENS       = 500;
 const MAX_HISTORY_LENGTH       = 20;
 const AI_REPLY_DELAY_MS        = 1500;
-const OLLAMA_TIMEOUT_MS        = 90_000; // 15 detik
+const OLLAMA_TIMEOUT_MS        = 15_000;  // 15 detik
+const GROQ_TIMEOUT_MS          = 10_000;  // 10 detik (Groq lebih cepat)
+
+const GROQ_API_URL             = 'https://api.groq.com/openai/v1/chat/completions';
 
 const DEFAULT_FALLBACK_MESSAGE = 'Maaf, saya sedang tidak bisa memproses pesan Anda saat ini. Tim kami akan segera menghubungi Anda.';
 
@@ -23,7 +27,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Ambil identifier kontak untuk keperluan logging & history.
- * Tidak digunakan untuk kirim pesan (pakai msg.reply() saja).
  */
 const getContactNumber = (msg) => {
   return msg.from || msg.id?.remote || 'unknown';
@@ -55,7 +58,7 @@ const buildSystemPrompt = (context) => {
 const getAIConfig = async (sessionId) => {
   const { data, error } = await supabase
     .from('ai_configs')
-    .select('id, is_enabled, context, ollama_url, model, max_tokens, fallback_message')
+    .select('id, is_enabled, context, ollama_url, model, max_tokens, fallback_message, provider, groq_api_key')
     .eq('session_id', sessionId)
     .single();
 
@@ -109,7 +112,7 @@ const saveChatHistory = async (sessionId, contactNumber, messages) => {
   }
 };
 
-const logAIReply = async (sessionId, to, replyText, isFallback = false) => {
+const logAIReply = async (sessionId, to, replyText, isFallback = false, provider = 'unknown') => {
   const { error } = await supabase.from('message_logs').insert({
     session_id:   sessionId,
     direction:    'outbound',
@@ -117,7 +120,7 @@ const logAIReply = async (sessionId, to, replyText, isFallback = false) => {
     type:         'text',
     status:       'sent',
     source:       'ai_reply',
-    payload:      { text: replyText, is_fallback: isFallback },
+    payload:      { text: replyText, is_fallback: isFallback, provider },
   });
 
   if (error) {
@@ -126,12 +129,12 @@ const logAIReply = async (sessionId, to, replyText, isFallback = false) => {
 };
 
 // ============================================================
-// OLLAMA REQUEST
+// PROVIDER: OLLAMA
 // ============================================================
 
 const requestOllama = async (config, system, history) => {
   const ollamaUrl = config.ollama_url || DEFAULT_OLLAMA_URL;
-  const model     = config.model      || DEFAULT_MODEL;
+  const model     = config.model      || DEFAULT_MODEL_OLLAMA;
   const maxTokens = config.max_tokens || DEFAULT_MAX_TOKENS;
 
   const controller = new AbortController();
@@ -160,8 +163,7 @@ const requestOllama = async (config, system, history) => {
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      console.error(`[AIReplyService] Ollama HTTP ${response.status}:`, errText);
-      return null;
+      throw new Error(`Ollama HTTP ${response.status}: ${errText}`);
     }
 
     const data = await response.json();
@@ -171,13 +173,130 @@ const requestOllama = async (config, system, history) => {
     clearTimeout(timeoutId);
 
     if (err.name === 'AbortError') {
-      console.error(`[AIReplyService] Request ke Ollama timeout (${OLLAMA_TIMEOUT_MS / 1000}s)`);
+      console.error(`[AIReplyService] Ollama timeout (${OLLAMA_TIMEOUT_MS / 1000}s)`);
     } else {
-      console.error(`[AIReplyService] Gagal request ke Ollama:`, err.message);
+      console.error(`[AIReplyService] Ollama error:`, err.message);
     }
 
     return null;
   }
+};
+
+// ============================================================
+// PROVIDER: GROQ
+// ============================================================
+
+const requestGroq = async (config, system, history) => {
+  const apiKey    = config.groq_api_key;
+  const maxTokens = config.max_tokens || DEFAULT_MAX_TOKENS;
+
+  if (!apiKey) {
+    console.warn(`[AIReplyService] Groq API key tidak ditemukan`);
+    return null;
+  }
+
+  // Gunakan model yang sudah disimpan jika ada, jika tidak pakai default Groq
+  // Model Groq berbeda dengan Ollama, jadi pakai default khusus Groq
+  const model = config.model && !config.model.includes(':')
+    ? config.model          // sudah format Groq (misal: llama-3.3-70b-versatile)
+    : DEFAULT_MODEL_GROQ;   // fallback ke default Groq
+
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), GROQ_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(GROQ_API_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          ...history,
+        ],
+        max_tokens:  maxTokens,
+        temperature: 0.7,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(`Groq HTTP ${response.status}: ${errData?.error?.message || 'unknown error'}`);
+    }
+
+    const data = await response.json();
+    return data?.choices?.[0]?.message?.content?.trim() || null;
+
+  } catch (err) {
+    clearTimeout(timeoutId);
+
+    if (err.name === 'AbortError') {
+      console.error(`[AIReplyService] Groq timeout (${GROQ_TIMEOUT_MS / 1000}s)`);
+    } else {
+      console.error(`[AIReplyService] Groq error:`, err.message);
+    }
+
+    // Re-throw agar dispatcher bisa handle fallback
+    throw err;
+  }
+};
+
+// ============================================================
+// DISPATCHER — Pilih provider, handle fallback
+// ============================================================
+
+/**
+ * Jalankan AI request sesuai provider yang dipilih user.
+ * Mengembalikan { reply, usedProvider } atau { reply: null }
+ *
+ * Provider:
+ *   'ollama' → hanya Ollama
+ *   'groq'   → hanya Groq
+ *   'auto'   → coba Groq dulu, fallback ke Ollama jika gagal
+ */
+const dispatchAIRequest = async (config, systemPrompt, history) => {
+  const provider = config.provider || 'ollama';
+
+  // --- Hanya Ollama ---
+  if (provider === 'ollama') {
+    const reply = await requestOllama(config, systemPrompt, history);
+    return { reply, usedProvider: 'ollama' };
+  }
+
+  // --- Hanya Groq ---
+  if (provider === 'groq') {
+    try {
+      const reply = await requestGroq(config, systemPrompt, history);
+      return { reply, usedProvider: 'groq' };
+    } catch {
+      return { reply: null, usedProvider: 'groq' };
+    }
+  }
+
+  // --- Auto: Groq dulu, fallback ke Ollama ---
+  if (provider === 'auto') {
+    try {
+      console.log(`[AIReplyService] Mencoba Groq...`);
+      const reply = await requestGroq(config, systemPrompt, history);
+      if (reply) {
+        console.log(`[AIReplyService] ✓ Groq berhasil`);
+        return { reply, usedProvider: 'groq' };
+      }
+      throw new Error('Groq reply kosong');
+    } catch (err) {
+      console.warn(`[AIReplyService] ⚠ Groq gagal (${err.message}), fallback ke Ollama...`);
+      const reply = await requestOllama(config, systemPrompt, history);
+      return { reply, usedProvider: 'ollama' };
+    }
+  }
+
+  return { reply: null, usedProvider: 'unknown' };
 };
 
 // ============================================================
@@ -206,48 +325,39 @@ const getAIReply = async (sessionId, msg) => {
   const incomingText  = msg.body.trim();
   const fallback      = config.fallback_message || DEFAULT_FALLBACK_MESSAGE;
 
-  console.log(`[AIReplyService] Memproses pesan dari ${contactNumber} di sesi ${sessionId}`);
+  console.log(`[AIReplyService] Memproses pesan dari ${contactNumber} via ${config.provider || 'ollama'}`);
 
   const history        = await getChatHistory(sessionId, contactNumber);
   const updatedHistory = [...history, { role: 'user', content: incomingText }];
   const systemPrompt   = buildSystemPrompt(config.context);
-  const aiReply        = await requestOllama(config, systemPrompt, updatedHistory);
+
+  const { reply: aiReply, usedProvider } = await dispatchAIRequest(config, systemPrompt, updatedHistory);
 
   if (!aiReply) {
-    console.warn(`[AIReplyService] AI gagal, menggunakan fallback untuk sesi ${sessionId}`);
-    return { text: fallback, isFallback: true };
+    console.warn(`[AIReplyService] Semua provider gagal, menggunakan fallback`);
+    return { text: fallback, isFallback: true, provider: 'fallback' };
   }
 
-  // Simpan history hanya jika AI berhasil (bukan fallback)
+  // Simpan history hanya jika AI berhasil
   await saveChatHistory(sessionId, contactNumber, [
     ...updatedHistory,
     { role: 'assistant', content: aiReply },
   ]);
 
-  console.log(`[AIReplyService] ✓ Balasan AI siap untuk ${contactNumber}: "${aiReply.substring(0, 60)}..."`);
+  console.log(`[AIReplyService] ✓ Reply dari ${usedProvider}: "${aiReply.substring(0, 60)}..."`);
 
-  return { text: aiReply, isFallback: false };
+  return { text: aiReply, isFallback: false, provider: usedProvider };
 };
 
 // ============================================================
 // HANDLE INCOMING
 // ============================================================
 
-/**
- * Entry point utama yang dipanggil dari sessionManager.js.
- *
- * Menggunakan msg.reply() — BUKAN client.sendMessage() — agar
- * kompatibel dengan semua format ID WhatsApp termasuk @lid
- * yang digunakan pada perangkat multi-device.
- *
- * msg.reply() secara internal sudah tahu ke mana harus membalas
- * tanpa perlu kita resolve nomor kontak secara manual.
- */
-const handleIncomingMessage = async (sessionId, msg) => { // client tidak diperlukan lagi
+const handleIncomingMessage = async (sessionId, msg) => {
   const result = await getAIReply(sessionId, msg);
   if (!result) return;
 
-  const { text: replyText, isFallback } = result;
+  const { text: replyText, isFallback, provider } = result;
   const contactNumber = getContactNumber(msg);
 
   // Typing indicator — non-critical
@@ -267,18 +377,16 @@ const handleIncomingMessage = async (sessionId, msg) => { // client tidak diperl
   }
 
   try {
-    // ✅ msg.reply() — kompatibel dengan @lid, @c.us, semua format
     await msg.reply(replyText);
-
-    await logAIReply(sessionId, contactNumber, replyText, isFallback);
+    await logAIReply(sessionId, contactNumber, replyText, isFallback, provider);
 
     console.log(
       isFallback
         ? `[AIReplyService] ⚠ Fallback terkirim ke ${contactNumber}`
-        : `[AIReplyService] ✓ AI reply terkirim ke ${contactNumber}`
+        : `[AIReplyService] ✓ [${provider}] Reply terkirim ke ${contactNumber}`
     );
   } catch (err) {
-    console.error(`[AIReplyService] Gagal kirim balasan AI ke ${contactNumber}:`, err.message);
+    console.error(`[AIReplyService] Gagal kirim balasan ke ${contactNumber}:`, err.message);
   }
 };
 
