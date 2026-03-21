@@ -39,6 +39,9 @@ const DEFAULT_CONFIG: AIConfig = {
   ollama_url: 'http://localhost:11434',
   model: 'qwen2.5:7b',
   max_tokens: 500,
+  fallback_message: '',        // ✅ tambahkan
+  provider: 'ollama',  // ✅ tambahkan
+  groq_api_key: '',        // ✅ tambahkan
 };
 
 // ─────────────────────────────────────────────
@@ -62,7 +65,7 @@ export default function AIConfigTab({ session }: { session: Session }) {
     setLoading(true);
     try {
       const { data } = await api.get(`/api/internal/sessions/${session.id}/ai-config`);
-      setConfig(data.data ?? DEFAULT_CONFIG);
+      setConfig({ ...DEFAULT_CONFIG, ...(data.data ?? {}) });
     } catch (err: any) {
       // 404 = belum ada config, pakai default
       if (err?.response?.status !== 404) {

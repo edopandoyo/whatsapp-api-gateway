@@ -51,7 +51,7 @@ router.get('/', async (req, res, next) => {
 
     const { data, error } = await supabase
       .from('ai_configs')
-      .select('id, is_enabled, context, ollama_url, model, max_tokens, created_at, updated_at')
+      .select('id, is_enabled, context, ollama_url, model, max_tokens, created_at, fallback_message, provider, groq_api_key, updated_at')
       .eq('session_id', sessionId)
       .single();
 
