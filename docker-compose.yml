@@ -22,7 +22,7 @@ services:
     security_opt:
       - seccomp:unconfined
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3010:3000"
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
@@ -61,7 +61,7 @@ services:
     container_name: webwa-frontend
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8081:80"
     networks:
       - webwa-network
     depends_on:
