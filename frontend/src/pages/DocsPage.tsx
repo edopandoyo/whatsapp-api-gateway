@@ -7,6 +7,12 @@ import {
 import styles from './DocsPage.module.css';
 
 // ─────────────────────────────────────────────
+// Config — baca dari environment variable
+// ─────────────────────────────────────────────
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'https://backend-wa-api.masedo.my.id';
+const API_HOST = API_BASE.replace(/^https?:\/\//, '');
+
+// ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
 type Section =
@@ -99,7 +105,7 @@ function SectionOverview() {
                     <Globe size={18} />
                     <div>
                         <p className={styles.infoLabel}>Base URL</p>
-                        <code className={styles.infoValue}>https://api.yourdomain.com</code>
+                        <code className={styles.infoValue}>{API_BASE}</code>
                     </div>
                 </div>
                 <div className={styles.infoCard}>
@@ -186,24 +192,25 @@ function SectionAuth() {
 
             <h2 className={styles.h2}>Header Autentikasi</h2>
             <CodeBlock lang="http" code={`POST /api/v1/messages/text HTTP/1.1
-Host: api.yourdomain.com
+Host: ${API_HOST}
 x-api-key: wa_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 Content-Type: application/json`} />
 
             <h2 className={styles.h2}>Contoh dengan cURL</h2>
-            <CodeBlock lang="bash" code={`curl -X POST https://api.yourdomain.com/api/v1/messages/text \\
+            <CodeBlock lang="bash" code={`curl -X POST ${API_BASE}/api/v1/messages/text \\
   -H "x-api-key: wa_YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"to": "6281234567890", "text": "Halo!"}'`} />
+  -d '{"session_id": "YOUR_SESSION_ID", "to": "6281234567890", "text": "Halo!"}'`} />
 
             <h2 className={styles.h2}>Contoh dengan JavaScript</h2>
-            <CodeBlock lang="javascript" code={`const response = await fetch('https://api.yourdomain.com/api/v1/messages/text', {
+            <CodeBlock lang="javascript" code={`const response = await fetch('${API_BASE}/api/v1/messages/text', {
   method: 'POST',
   headers: {
     'x-api-key': 'wa_YOUR_API_KEY',
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
+    session_id: 'YOUR_SESSION_ID',
     to: '6281234567890',
     text: 'Halo dari integrasi saya!',
   }),
@@ -232,28 +239,7 @@ function SectionSendText() {
 
             <div className={styles.endpointBar}>
                 <MethodBadge method="POST" />
-                <code>/api/v1/sessions/<span className={styles.urlParam}>:sessionId</span>/messages/text</code>
-            </div>
-
-            <h2 className={styles.h2}>URL Parameter</h2>
-            <table className={styles.table}>
-                <thead>
-                    <tr><th>Parameter</th><th>Tipe</th><th>Status</th><th>Deskripsi</th></tr>
-                </thead>
-                <tbody>
-                    <ParamRow name=":sessionId" type="string (uuid)" required desc="UUID sesi WhatsApp yang akan digunakan untuk mengirim pesan. Dapatkan dari dashboard → Sesi." />
-                </tbody>
-            </table>
-
-            <div className={styles.tipBox}>
-                <Layers size={15} />
-                <div>
-                    <p className={styles.tipTitle}>Cara mendapatkan Session ID</p>
-                    <p className={styles.tipDesc}>
-                        Buka <strong>Dashboard → Sesi WhatsApp</strong>, klik ikon <em>"Salin Session ID"</em>
-                        pada sesi yang sudah terhubung. Pastikan status sesi adalah <strong>Connected</strong> sebelum mengirim pesan.
-                    </p>
-                </div>
+                <code>/api/v1/messages/text</code>
             </div>
 
             <h2 className={styles.h2}>Request Body</h2>
@@ -262,17 +248,19 @@ function SectionSendText() {
                     <tr><th>Parameter</th><th>Tipe</th><th>Status</th><th>Deskripsi</th></tr>
                 </thead>
                 <tbody>
+                    <ParamRow name="session_id" type="string (uuid)" required desc="UUID sesi WhatsApp. Dapatkan dari dashboard → Sesi." />
                     <ParamRow name="to" type="string" required desc="Nomor tujuan format internasional (628xxx atau 08xxx)" />
                     <ParamRow name="text" type="string" required desc="Isi pesan teks yang akan dikirim" />
                 </tbody>
             </table>
 
             <h2 className={styles.h2}>Contoh Request</h2>
-            <CodeBlock lang="http" code={`POST /api/v1/sessions/f6e624fb-24eb-4f3e-a15f-d22280b3bf68/messages/text
+            <CodeBlock lang="http" code={`POST /api/v1/messages/text
 x-api-key: wa_YOUR_API_KEY
 Content-Type: application/json
 
 {
+  "session_id": "f6e624fb-24eb-4f3e-a15f-d22280b3bf68",
   "to": "6281234567890",
   "text": "Halo! Pesanan Anda #12345 telah dikonfirmasi."
 }`} />
@@ -289,28 +277,24 @@ Content-Type: application/json
 
             <h2 className={styles.h2}>Contoh dengan cURL</h2>
             <CodeBlock lang="bash" code={`curl -X POST \\
-  https://api.yourdomain.com/api/v1/sessions/f6e624fb-24eb-4f3e-a15f-d22280b3bf68/messages/text \\
+  ${API_BASE}/api/v1/messages/text \\
   -H "x-api-key: wa_YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"to": "6281234567890", "text": "Halo dari sistem saya!"}'`} />
+  -d '{"session_id": "f6e624fb-24eb-4f3e-a15f-d22280b3bf68", "to": "6281234567890", "text": "Halo dari sistem saya!"}'`} />
 
             <h2 className={styles.h2}>Contoh dengan JavaScript</h2>
-            <CodeBlock lang="javascript" code={`const SESSION_ID = 'f6e624fb-24eb-4f3e-a15f-d22280b3bf68';
-
-const res = await fetch(
-  \`https://api.yourdomain.com/api/v1/sessions/\${SESSION_ID}/messages/text\`,
-  {
-    method: 'POST',
-    headers: {
-      'x-api-key': 'wa_YOUR_API_KEY',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      to: '6281234567890',
-      text: 'Notifikasi dari sistem Anda.',
-    }),
-  }
-);
+            <CodeBlock lang="javascript" code={`const res = await fetch('${API_BASE}/api/v1/messages/text', {
+  method: 'POST',
+  headers: {
+    'x-api-key': 'wa_YOUR_API_KEY',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    session_id: 'f6e624fb-24eb-4f3e-a15f-d22280b3bf68',
+    to: '6281234567890',
+    text: 'Notifikasi dari sistem Anda.',
+  }),
+});
 const { success, data } = await res.json();`} />
         </div>
     );
