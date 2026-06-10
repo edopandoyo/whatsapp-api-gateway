@@ -15,8 +15,9 @@ const { authenticateJWT, authenticateApiKey } = require('./middleware/auth');
 const { notFoundHandler, errorHandler }       = require('./middleware/errorHandler');
 const sessionManager = require('./services/sessionManager');
 
-const sessionsRouterFactory  = require('./routes/sessions');
-const messagesRouterFactory  = require('./routes/messages');
+const sessionsRouterFactory        = require('./routes/sessions');
+const messagesRouterFactory        = require('./routes/messages');       // internal
+const messagesExternalRouterFactory = require('./routes/messagesExternal'); // external API
 const apiKeysRouter          = require('./routes/apiKeys');
 const aiConfigRouter         = require('./routes/aiConfig');
 
@@ -207,10 +208,11 @@ app.use('/api/internal', internalRouter);
 
 // --- External API — diproteksi API Key ---
 // Endpoint untuk integrasi pihak ketiga via x-api-key header
+// sessionId dibaca dari body (bukan URL)
 const externalRouter = express.Router();
 externalRouter.use(rateLimiter);
 externalRouter.use(authenticateApiKey);
-externalRouter.use('/sessions', messagesRouterFactory(io));   // POST kirim pesan
+externalRouter.use('/messages', messagesExternalRouterFactory(io)); // POST /api/v1/messages/*
 
 app.use('/api/v1', externalRouter);
 
