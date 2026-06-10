@@ -81,7 +81,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ env.VPS_PORT }}
           source: "docker-compose.yml,nginx-sites/"
-          target: "/opt/apps/webwa"
+          target: "/home/ubuntu/webwa"
           timeout: 60s
           command_timeout: 10m
 
@@ -96,7 +96,7 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
-            cd /opt/apps/webwa
+            cd /home/ubuntu/webwa
 
             echo "🔐 Login ke GHCR..."
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io \
