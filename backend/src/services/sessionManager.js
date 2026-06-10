@@ -278,6 +278,8 @@ const createSession = (sessionId, io, retryCount = 0) => {
 
 /**
  * Logout dan hancurkan client WhatsApp untuk sessionId tertentu.
+ * Gunakan ini hanya saat user SENGAJA menghapus/disconnect sesi.
+ * Memanggil logout() akan menghapus sesi dari WhatsApp — QR scan ulang diperlukan.
  */
 const deleteSession = async (sessionId) => {
   const client = sessions.get(sessionId);
@@ -302,7 +304,31 @@ const deleteSession = async (sessionId) => {
 
   await aiReplyService.clearAllHistoriesBySession(sessionId);
   sessions.delete(sessionId);
-  console.log(`[SessionManager] Sesi dihapus: ${sessionId}`);
+  console.log(`[SessionManager] Sesi dihapus (logout): ${sessionId}`);
+};
+
+// ============================================================
+// DESTROY SESSION (Graceful Shutdown — TANPA logout)
+// ============================================================
+
+/**
+ * Hancurkan Puppeteer client TANPA logout dari WhatsApp.
+ * Gunakan ini saat server shutdown/restart/redeploy agar
+ * session data di volume tetap valid — tidak perlu QR scan ulang.
+ */
+const destroySession = async (sessionId) => {
+  const client = sessions.get(sessionId);
+
+  if (!client) return;
+
+  try {
+    await client.destroy();
+  } catch (err) {
+    console.warn(`[SessionManager] destroy() error untuk ${sessionId}:`, err.message);
+  }
+
+  sessions.delete(sessionId);
+  console.log(`[SessionManager] Sesi di-destroy (tanpa logout): ${sessionId}`);
 };
 
 // ============================================================
@@ -354,6 +380,7 @@ const getCachedQr = (sessionId) => qrCache.get(sessionId) || null;
 module.exports = {
   createSession,
   deleteSession,
+  destroySession,
   getSession,
   getAllSessions,
   getCachedQr, 

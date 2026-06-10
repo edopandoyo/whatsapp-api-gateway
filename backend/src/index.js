@@ -21,6 +21,7 @@ const messagesExternalRouterFactory = require('./routes/messagesExternal'); // e
 const apiKeysRouter          = require('./routes/apiKeys');
 const aiConfigRouter         = require('./routes/aiConfig');
 
+
 // ============================================================
 // EXPRESS + HTTP SERVER
 // ============================================================
@@ -231,7 +232,7 @@ server.listen(env.PORT, async () => {
   console.log(`   Frontend URL: ${env.FRONTEND_URL}`);
   console.log(`   Supabase URL: ${env.SUPABASE_URL}\n`);
 
-  // Restore sesi aktif dari DB
+  // Restore sesi aktif dari DB (LocalAuth akan baca file session di volume)
   await sessionManager.restoreActiveSessions(io);
 });
 
@@ -239,9 +240,11 @@ server.listen(env.PORT, async () => {
 const gracefulShutdown = async (signal) => {
   console.log(`\n[Server] Menerima ${signal}. Memulai graceful shutdown...`);
 
+  // Gunakan destroySession() bukan deleteSession() agar session WA tidak logout
+  // Session data di volume tetap valid — tidak perlu QR scan ulang setelah restart
   for (const sessionId of sessionManager.getAllSessions()) {
-    console.log(`[Server] Menghancurkan sesi: ${sessionId}`);
-    await sessionManager.deleteSession(sessionId).catch(console.error);
+    console.log(`[Server] Destroy sesi (tanpa logout): ${sessionId}`);
+    await sessionManager.destroySession(sessionId).catch(console.error);
   }
 
   server.close(() => {
