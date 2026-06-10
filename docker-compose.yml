@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ============================================================
 # WebWA Gateway — Docker Compose
 # Cara pakai:
@@ -12,7 +10,7 @@ services:
   # Backend — Node.js + whatsapp-web.js
   # ----------------------------------------------------------
   backend:
-    image: ghcr.io/anovateknodigital/webwa-backend:latest
+    image: ghcr.io/edopandoyo/webwa-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -52,7 +50,7 @@ services:
   # Frontend — React (Vite) served via Nginx
   # ----------------------------------------------------------
   frontend:
-    image: ghcr.io/anovateknodigital/webwa-frontend:latest
+    image: ghcr.io/edopandoyo/webwa-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
