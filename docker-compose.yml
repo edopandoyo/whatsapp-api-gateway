@@ -24,13 +24,13 @@ services:
     security_opt:
       - seccomp:unconfined
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - FRONTEND_URL=${FRONTEND_URL:-https://wa-gateway.masedo.my.id}
       - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-60}
       - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
       - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -63,7 +63,7 @@ services:
     container_name: webwa-frontend
     restart: unless-stopped
     ports:
-      - "5173:80"
+      - "127.0.0.1:8080:80"
     networks:
       - webwa-network
     depends_on:

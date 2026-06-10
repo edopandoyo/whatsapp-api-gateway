@@ -53,7 +53,7 @@ jobs:
           build-args: |
             VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            VITE_API_BASE_URL=https://backend-wa-api.masedo.my.id
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -66,17 +66,18 @@ jobs:
     needs: build # Tunggu build selesai dulu
 
     steps:
-      - name: Checkout kode (untuk docker-compose.yml)
+      - name: Checkout kode
         uses: actions/checkout@v4
 
-      - name: Copy docker-compose ke VPS
+      # Salin docker-compose.yml dan nginx config ke VPS
+      - name: Copy files ke VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          source: "docker-compose.yml"
+          source: "docker-compose.yml,nginx-sites/"
           target: "/opt/apps/webwa"
 
       - name: Deploy via SSH
@@ -99,19 +100,26 @@ jobs:
             NODE_ENV=production
             SUPABASE_URL=${{ secrets.SUPABASE_URL }}
             SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
-            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            FRONTEND_URL=https://wa-gateway.masedo.my.id
             RATE_LIMIT_MAX=60
             RATE_LIMIT_WINDOW_MS=60000
             EOF
 
+            echo "🌐 Update Nginx site configs..."
+            sudo cp nginx-sites/backend-wa-api.masedo.my.id.conf /etc/nginx/sites-available/backend-wa-api.masedo.my.id.conf
+            sudo cp nginx-sites/wa-gateway.masedo.my.id.conf /etc/nginx/sites-available/wa-gateway.masedo.my.id.conf
+
+            # Aktifkan site jika belum ada symlink
+            sudo ln -sf /etc/nginx/sites-available/backend-wa-api.masedo.my.id.conf /etc/nginx/sites-enabled/backend-wa-api.masedo.my.id.conf
+            sudo ln -sf /etc/nginx/sites-available/wa-gateway.masedo.my.id.conf /etc/nginx/sites-enabled/wa-gateway.masedo.my.id.conf
+
+            echo "🔍 Test konfigurasi Nginx..."
+            sudo nginx -t
+
             echo "📦 Pull image terbaru..."
             docker compose pull
 
-            echo "🚀 Restart container (zero-downtime)..."
-            # Restart backend dulu, tunggu healthy, baru frontend
+            echo "🚀 Restart container backend..."
             docker compose up -d --no-deps backend
 
             echo "⏳ Menunggu backend healthy..."
@@ -120,7 +128,11 @@ jobs:
               --format="{{.State.Health.Status}}" | grep -q "healthy"; \
               do sleep 5; echo "  masih menunggu..."; done'
 
+            echo "🚀 Restart container frontend..."
             docker compose up -d --no-deps frontend
+
+            echo "🔄 Reload Nginx..."
+            sudo nginx -s reload
 
             echo "🧹 Bersihkan image lama..."
             docker image prune -f
