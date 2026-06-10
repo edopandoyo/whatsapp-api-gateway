@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch: # Bisa trigger manual dari GitHub UI
 
+env:
+  VPS_PORT: ${{ secrets.VPS_PORT != '' && secrets.VPS_PORT || '22' }}
+
 jobs:
   # ============================================================
   # JOB 1 — Build & Push Image ke GitHub Container Registry
@@ -76,9 +79,11 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          port: ${{ env.VPS_PORT }}
           source: "docker-compose.yml,nginx-sites/"
           target: "/opt/apps/webwa"
+          timeout: 60s
+          command_timeout: 10m
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
@@ -86,7 +91,9 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          port: ${{ env.VPS_PORT }}
+          timeout: 60s
+          command_timeout: 30m
           script: |
             set -e
             cd /opt/apps/webwa
