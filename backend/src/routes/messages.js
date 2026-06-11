@@ -75,6 +75,21 @@ const logOutboundMessage = async ({
 };
 
 // ============================================================
+// Helper: Memetakan error WhatsApp agar lebih mudah dipahami
+// ============================================================
+const handleWhatsAppError = (err) => {
+  if (!err) return err;
+
+  // Jika error karena nomor tidak terdaftar atau tidak valid di WA
+  if (err.message && err.message.includes('No LID for user')) {
+    err.message = 'Nomor tujuan tidak terdaftar di WhatsApp.';
+    err.statusCode = 400;
+  }
+
+  return err;
+};
+
+// ============================================================
 // FACTORY — inject io, kembalikan router
 // ============================================================
 module.exports = (io) => {
@@ -130,6 +145,7 @@ module.exports = (io) => {
         },
       });
     } catch (err) {
+      handleWhatsAppError(err);
       // Coba log kegagalan
       try {
         await logOutboundMessage({
@@ -200,6 +216,7 @@ module.exports = (io) => {
         data: { id: msg?.id?.id, to: chatId, type: 'media' },
       });
     } catch (err) {
+      handleWhatsAppError(err);
       next(err);
     }
   });
@@ -258,6 +275,7 @@ module.exports = (io) => {
 
           results.push({ to: chatId, status: 'sent', id: msg?.id?.id });
         } catch (sendErr) {
+          handleWhatsAppError(sendErr);
           await logOutboundMessage({
             sessionId,
             to: chatId,
