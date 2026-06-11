@@ -310,7 +310,7 @@ function SectionSendMedia() {
 
             <div className={styles.endpointBar}>
                 <MethodBadge method="POST" />
-                <code>/api/v1/sessions/:sessionId/messages/media</code>
+                <code>/api/v1/messages/media</code>
             </div>
 
             <h2 className={styles.h2}>Request Body</h2>
@@ -319,10 +319,11 @@ function SectionSendMedia() {
                     <tr><th>Parameter</th><th>Tipe</th><th>Status</th><th>Deskripsi</th></tr>
                 </thead>
                 <tbody>
-                    <ParamRow name="to" type="string" required desc="Nomor tujuan format internasional" />
+                    <ParamRow name="session_id" type="string (uuid)" required desc="UUID sesi WhatsApp. Dapatkan dari dashboard → Sesi." />
+                    <ParamRow name="to" type="string" required desc="Nomor tujuan format internasional (628xxx atau 08xxx)" />
                     <ParamRow name="mediaUrl" type="string" desc="URL publik file media (gunakan ini atau base64)" />
                     <ParamRow name="base64" type="string" desc="String base64 dari file (gunakan ini atau mediaUrl)" />
-                    <ParamRow name="mimetype" type="string" required desc="MIME type file, mis: image/jpeg, application/pdf" />
+                    <ParamRow name="mimetype" type="string" required desc="MIME type file, mis: image/jpeg, application/pdf, image/png" />
                     <ParamRow name="filename" type="string" desc="Nama file yang ditampilkan ke penerima" />
                     <ParamRow name="caption" type="string" desc="Keterangan di bawah media (opsional)" />
                 </tbody>
@@ -330,6 +331,7 @@ function SectionSendMedia() {
 
             <h2 className={styles.h2}>Kirim via URL</h2>
             <CodeBlock lang="json" code={`{
+  "session_id": "f6e624fb-24eb-4f3e-a15f-d22280b3bf68",
   "to": "6281234567890",
   "mediaUrl": "https://example.com/invoice.pdf",
   "mimetype": "application/pdf",
@@ -339,6 +341,7 @@ function SectionSendMedia() {
 
             <h2 className={styles.h2}>Kirim via Base64</h2>
             <CodeBlock lang="json" code={`{
+  "session_id": "f6e624fb-24eb-4f3e-a15f-d22280b3bf68",
   "to": "6281234567890",
   "base64": "/9j/4AAQSkZJRgABAQAAAQABAAD...",
   "mimetype": "image/jpeg",
@@ -355,6 +358,30 @@ function SectionSendMedia() {
     "type": "media"
   }
 }`} />
+
+            <h2 className={styles.h2}>Contoh dengan cURL</h2>
+            <CodeBlock lang="bash" code={`curl -X POST \\
+  ${API_BASE}/api/v1/messages/media \\
+  -H "x-api-key: wa_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"session_id": "f6e624fb-24eb-4f3e-a15f-d22280b3bf68", "to": "6281234567890", "mediaUrl": "https://example.com/logo.png", "mimetype": "image/png", "caption": "Logo Kami"}'`} />
+
+            <h2 className={styles.h2}>Contoh dengan JavaScript</h2>
+            <CodeBlock lang="javascript" code={`const res = await fetch('${API_BASE}/api/v1/messages/media', {
+  method: 'POST',
+  headers: {
+    'x-api-key': 'wa_YOUR_API_KEY',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    session_id: 'f6e624fb-24eb-4f3e-a15f-d22280b3bf68',
+    to: '6281234567890',
+    mediaUrl: 'https://example.com/logo.png',
+    mimetype: 'image/png',
+    caption: 'Logo Kami',
+  }),
+});
+const { success, data } = await res.json();`} />
         </div>
     );
 }
@@ -370,7 +397,7 @@ function SectionSendBulk() {
 
             <div className={styles.endpointBar}>
                 <MethodBadge method="POST" />
-                <code>/api/v1/sessions/:sessionId/messages/bulk</code>
+                <code>/api/v1/messages/bulk</code>
             </div>
 
             <div className={styles.alertBox} data-type="warning">
@@ -384,6 +411,7 @@ function SectionSendBulk() {
                     <tr><th>Parameter</th><th>Tipe</th><th>Status</th><th>Deskripsi</th></tr>
                 </thead>
                 <tbody>
+                    <ParamRow name="session_id" type="string (uuid)" required desc="UUID sesi WhatsApp. Dapatkan dari dashboard → Sesi." />
                     <ParamRow name="messages" type="array" required desc="Array objek pesan, maks 100 item" />
                     <ParamRow name="messages[].to" type="string" required desc="Nomor tujuan" />
                     <ParamRow name="messages[].text" type="string" required desc="Isi pesan teks" />
@@ -392,6 +420,7 @@ function SectionSendBulk() {
 
             <h2 className={styles.h2}>Contoh Request</h2>
             <CodeBlock lang="json" code={`{
+  "session_id": "f6e624fb-24eb-4f3e-a15f-d22280b3bf68",
   "messages": [
     { "to": "6281234567890", "text": "Halo Budi, promo hari ini 20% off!" },
     { "to": "6289876543210", "text": "Halo Ani, promo hari ini 20% off!" },
@@ -411,6 +440,36 @@ function SectionSendBulk() {
     ]
   }
 }`} />
+
+            <h2 className={styles.h2}>Contoh dengan cURL</h2>
+            <CodeBlock lang="bash" code={`curl -X POST \\
+  ${API_BASE}/api/v1/messages/bulk \\
+  -H "x-api-key: wa_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "session_id": "f6e624fb-24eb-4f3e-a15f-d22280b3bf68",
+    "messages": [
+      { "to": "6281234567890", "text": "Halo Budi!" },
+      { "to": "6289876543210", "text": "Halo Ani!" }
+    ]
+  }'`} />
+
+            <h2 className={styles.h2}>Contoh dengan JavaScript</h2>
+            <CodeBlock lang="javascript" code={`const res = await fetch('${API_BASE}/api/v1/messages/bulk', {
+  method: 'POST',
+  headers: {
+    'x-api-key': 'wa_YOUR_API_KEY',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    session_id: 'f6e624fb-24eb-4f3e-a15f-d22280b3bf68',
+    messages: [
+      { to: '6281234567890', text: 'Halo Budi!' },
+      { to: '6289876543210', text: 'Halo Ani!' },
+    ],
+  }),
+});
+const { success, data } = await res.json();`} />
         </div>
     );
 }
