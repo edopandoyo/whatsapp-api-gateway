@@ -209,18 +209,20 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_user_id  ON public.api_keys(user_id);
 -- Sesi WhatsApp yang terhubung per pengguna
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.sessions (
-  id            UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id       UUID           NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  session_name  TEXT           NOT NULL,
-  phone_number  TEXT,
-  status        session_status NOT NULL DEFAULT 'pending',
-  webhook_url   TEXT,
-  created_at    TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+  id                  UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id             UUID           NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  session_name        TEXT           NOT NULL,
+  phone_number        TEXT,
+  status              session_status NOT NULL DEFAULT 'pending',
+  webhook_url         TEXT,
+  last_connected_at   TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE public.sessions IS 'Sesi WhatsApp yang terhubung per pengguna.';
 COMMENT ON COLUMN public.sessions.webhook_url IS 'URL untuk pengiriman event inbound (pesan masuk, status update).';
+COMMENT ON COLUMN public.sessions.last_connected_at IS 'Timestamp terakhir kali sesi berhasil terhubung (event ready).';
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON public.sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_status  ON public.sessions(status);

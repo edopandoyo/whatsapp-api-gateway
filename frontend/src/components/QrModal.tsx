@@ -71,6 +71,14 @@ export default function QrModal({ session, onClose, onReady }: Props) {
     return () => clearTimeout(t);
   }, [qr]);
 
+  // Timeout fallback: if no QR arrives in 20s, show a helpful message
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (qr) return; // QR already arrived
+    const t = setTimeout(() => setTimedOut(true), 20_000);
+    return () => clearTimeout(t);
+  }, [qr]);
+
   const statusMsg: Record<string, string> = {
     waiting: 'Memuat QR Code…',
     scan: 'Scan dengan WhatsApp di ponsel Anda',
@@ -101,9 +109,22 @@ export default function QrModal({ session, onClose, onReady }: Props) {
               <p style={{ color: 'var(--c-text-2)', marginTop: 12 }}>QR kedaluwarsa</p>
               <button
                 className={styles.refreshBtn}
-                onClick={() => { setExpired(false); setQr(null); setStatus('waiting'); }}
+                onClick={() => { setExpired(false); setQr(null); setStatus('waiting'); setTimedOut(false); }}
               >
                 Muat Ulang
+              </button>
+            </div>
+          ) : timedOut && !qr ? (
+            <div className={styles.expiredBox}>
+              <RefreshCw size={28} color="var(--c-text-3)" />
+              <p style={{ color: 'var(--c-text-2)', marginTop: 8, fontSize: 13, textAlign: 'center' }}>
+                QR Code tidak muncul.<br />Pastikan sesi sudah di-reconnect terlebih dahulu.
+              </p>
+              <button
+                className={styles.refreshBtn}
+                onClick={() => { setTimedOut(false); setStatus('waiting'); }}
+              >
+                Coba Lagi
               </button>
             </div>
           ) : qr ? (

@@ -11,6 +11,10 @@ const aiReplyService = require('./aiReplyService');
 const sessions = new Map();
 const qrCache   = new Map();
 
+// Track sessions that were intentionally disconnected (user delete / server shutdown)
+// These should NOT trigger auto-reconnect
+const intentionalDisconnects = new Set();
+
 // ============================================================
 // PUPPETEER CONFIG
 // ============================================================
@@ -120,7 +124,7 @@ const MAX_RETRY  = 3;
 const RETRY_DELAY_MS = 5000;
 
 
-const createSession = (sessionId, io, retryCount = 0) => {
+const createSession = (sessionId, io, retryCount = 0, maxAutoReconnect = 0) => {
   if (sessions.has(sessionId)) {
     console.log(`[SessionManager] Session ${sessionId} sudah ada, skip create`);
     return sessions.get(sessionId);
@@ -167,7 +171,8 @@ const createSession = (sessionId, io, retryCount = 0) => {
     console.log(`[SessionManager] Ready: ${sessionId}`);
     const phoneNumber = client.info?.wid?.user || null;
     await updateSessionStatus(sessionId, 'connected', {
-      phone_number: phoneNumber,
+      phone_number:      phoneNumber,
+      last_connected_at: new Date().toISOString(),
     });
     io.to(`session:${sessionId}`).emit('ready', {
       session_id:   sessionId,
@@ -193,7 +198,7 @@ const createSession = (sessionId, io, retryCount = 0) => {
   // EVENT: Sesi terputus
   // ----------------------------------------------------------
   client.on('disconnected', async (reason) => {
-    qrCache.delete(sessionId); //
+    qrCache.delete(sessionId);
     console.log(`[SessionManager] Disconnected: ${sessionId}, reason: ${reason}`);
     await updateSessionStatus(sessionId, 'disconnected');
     io.to(`session:${sessionId}`).emit('disconnected', {
@@ -201,6 +206,44 @@ const createSession = (sessionId, io, retryCount = 0) => {
       reason,
     });
     sessions.delete(sessionId);
+
+    // ── AUTO-RECONNECT ──────────────────────────────────────
+    // If the disconnect was NOT intentional (user delete / server shutdown),
+    // attempt to auto-reconnect. LocalAuth data may still be valid, so
+    // the reconnection can happen without a new QR scan.
+    if (!intentionalDisconnects.has(sessionId)) {
+      const AUTO_RECONNECT_DELAY = 5000; // 5 seconds
+      const MAX_AUTO_RECONNECT = 3;
+
+      console.log(
+        `[SessionManager] Auto-reconnect scheduled for ${sessionId} in ${AUTO_RECONNECT_DELAY / 1000}s...`
+      );
+
+      await new Promise((r) => setTimeout(r, AUTO_RECONNECT_DELAY));
+
+      // Double-check: still not intentional and not already re-created
+      if (!intentionalDisconnects.has(sessionId) && !sessions.has(sessionId)) {
+        console.log(`[SessionManager] Auto-reconnecting: ${sessionId}`);
+        createSession(sessionId, io, 0, MAX_AUTO_RECONNECT);
+      }
+    } else {
+      // Clear the flag for future use
+      intentionalDisconnects.delete(sessionId);
+    }
+  });
+
+  // ----------------------------------------------------------
+  // EVENT: Remote session saved (WA multi-device sync)
+  // ----------------------------------------------------------
+  client.on('remote_session_saved', () => {
+    console.log(`[SessionManager] Remote session saved: ${sessionId}`);
+  });
+
+  // ----------------------------------------------------------
+  // EVENT: Connection state change (for monitoring)
+  // ----------------------------------------------------------
+  client.on('change_state', (state) => {
+    console.log(`[SessionManager] State change [${sessionId}]: ${state}`);
   });
 
   // ----------------------------------------------------------
@@ -266,14 +309,21 @@ const createSession = (sessionId, io, retryCount = 0) => {
   client.initialize().catch(async (err) => {
     console.error(`[SessionManager] initialize() gagal untuk ${sessionId}:`, err.message);
     sessions.delete(sessionId);
-    if (retryCount < MAX_RETRY) {
+
+    const maxRetries = maxAutoReconnect > 0 ? maxAutoReconnect : MAX_RETRY;
+
+    if (retryCount < maxRetries && !intentionalDisconnects.has(sessionId)) {
+      const delay = RETRY_DELAY_MS * (retryCount + 1); // exponential backoff
       console.log(
-        `[SessionManager] Retry sesi ${sessionId} dalam ${RETRY_DELAY_MS / 1000}s...`
+        `[SessionManager] Retry sesi ${sessionId} dalam ${delay / 1000}s (attempt ${retryCount + 1}/${maxRetries})...`
       );
-      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-      createSession(sessionId, io, retryCount + 1);
+      await new Promise((r) => setTimeout(r, delay));
+
+      if (!intentionalDisconnects.has(sessionId) && !sessions.has(sessionId)) {
+        createSession(sessionId, io, retryCount + 1, maxAutoReconnect);
+      }
     } else {
-      console.error(`[SessionManager] Sesi ${sessionId} gagal setelah ${MAX_RETRY} percobaan.`);
+      console.error(`[SessionManager] Sesi ${sessionId} gagal setelah ${retryCount} percobaan.`);
       await updateSessionStatus(sessionId, 'disconnected').catch(console.error);
       io.to(`session:${sessionId}`).emit('error', {
         session_id: sessionId,
@@ -295,6 +345,9 @@ const createSession = (sessionId, io, retryCount = 0) => {
  * Memanggil logout() akan menghapus sesi dari WhatsApp — QR scan ulang diperlukan.
  */
 const deleteSession = async (sessionId) => {
+  // Mark as intentional so auto-reconnect won't fire
+  intentionalDisconnects.add(sessionId);
+
   const client = sessions.get(sessionId);
 
   if (!client) {
@@ -330,6 +383,9 @@ const deleteSession = async (sessionId) => {
  * session data di volume tetap valid — tidak perlu QR scan ulang.
  */
 const destroySession = async (sessionId) => {
+  // Mark as intentional so auto-reconnect won't fire
+  intentionalDisconnects.add(sessionId);
+
   const client = sessions.get(sessionId);
 
   if (!client) return;

@@ -16,6 +16,7 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [qrSession, setQrSession] = useState<Session | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
 
   // ── Drawer state ──────────────────────────
   const [detailSession, setDetailSession] = useState<Session | null>(null);
@@ -74,6 +75,30 @@ export default function SessionsPage() {
       fetchSessions();
     } catch {
       toast.error('Gagal menghubungkan ulang');
+    }
+  };
+
+  // "Scan QR" handler — reconnect first for disconnected sessions
+  const handleScanQR = async (sess: Session) => {
+    if (sess.status === 'connected') return;
+
+    // If the session is new (pending, never been connected), just open modal
+    if (sess.status === 'pending' && !sess.last_connected_at) {
+      setQrSession(sess);
+      return;
+    }
+
+    // Disconnected / auth_failure / authenticating — need reconnect first
+    try {
+      setReconnectingId(sess.id);
+      await api.post(`/api/internal/sessions/${sess.id}/reconnect`);
+      // Small delay to let the backend initialize the WA client & generate QR
+      await new Promise(r => setTimeout(r, 800));
+      setQrSession(sess);
+    } catch {
+      toast.error('Gagal memulai reconnect. Coba lagi.');
+    } finally {
+      setReconnectingId(null);
     }
   };
 
@@ -195,11 +220,15 @@ export default function SessionsPage() {
                 {sess.status !== 'connected' && (
                   <button
                     className={styles.actionBtn}
-                    onClick={() => setQrSession(sess)}
+                    onClick={() => handleScanQR(sess)}
+                    disabled={reconnectingId === sess.id}
                     title="Scan QR"
                   >
-                    <QrCode size={14} />
-                    Scan QR
+                    {reconnectingId === sess.id
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : <QrCode size={14} />
+                    }
+                    {reconnectingId === sess.id ? 'Memuat…' : 'Scan QR'}
                   </button>
                 )}
                 {(sess.status === 'disconnected' || sess.status === 'auth_failure') && (

@@ -79,7 +79,7 @@ module.exports = (io) => {
     try {
       const { data, error } = await supabase
         .from('sessions')
-        .select('id, session_name, status, phone_number, webhook_url, created_at, updated_at')
+        .select('id, session_name, status, phone_number, webhook_url, last_connected_at, created_at, updated_at')
         .eq('user_id', req.userId)
         .order('created_at', { ascending: false });
 
@@ -103,7 +103,7 @@ module.exports = (io) => {
 
       const { data, error } = await supabase
         .from('sessions')
-        .select('id, name, status, phone_number, webhook_url, created_at, updated_at')
+        .select('id, session_name, status, phone_number, webhook_url, last_connected_at, created_at, updated_at')
         .eq('id', sessionId)
         .eq('user_id', req.userId)
         .single();
