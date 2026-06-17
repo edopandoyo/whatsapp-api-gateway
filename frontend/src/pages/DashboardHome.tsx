@@ -1,13 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Smartphone, MessageSquare, Activity,
-  TrendingUp, ArrowRight, Zap,
+  TrendingUp, ArrowRight, Zap, Inbox, Send,
 } from 'lucide-react';
 import api from '../lib/api';
+import { supabase } from '../lib/supabase';
 import type { Session, MessageLog } from '../types';
 import StatusBadge from '../components/StatusBadge';
 import styles from './DashboardHome.module.css';
+
+const cleanNumber = (n: string | null | undefined) =>
+  n ? n.replace(/@c\.us$/i, '').replace(/@s\.whatsapp\.net$/i, '') : '—';
+
+const timeAgo = (iso: string) => {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'Baru saja';
+  if (mins < 60) return `${mins}m lalu`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}j lalu`;
+  const days = Math.floor(hrs / 24);
+  return `${days}h lalu`;
+};
 
 export default function DashboardHome() {
   const navigate = useNavigate();
@@ -16,32 +31,48 @@ export default function DashboardHome() {
   const [loadingS, setLoadingS] = useState(true);
   const [loadingL, setLoadingL] = useState(true);
 
-  useEffect(() => {
-    api.get<{ data: Session[] }>('/api/internal/sessions')
-      .then(async r => {
-        const sess = r.data.data;
-        setSessions(sess);
-
-        // Ambil log dari sesi pertama yang connected
-        const active = sess.find(s => s.status === 'connected');
-        if (active) {
-          const logs = await api.get<{ data: MessageLog[] }>(
-            `/api/internal/sessions/${active.id}/messages?limit=5`
-          );
-          setLogs(logs.data.data);
-        }
-      })
-      .finally(() => { setLoadingS(false); setLoadingL(false); });
+  const fetchLogs = useCallback(() => {
+    api.get<{ data: MessageLog[]; meta: { total: number } }>(
+      '/api/internal/messages?limit=10'
+    )
+      .then(r => setLogs(r.data.data))
+      .catch(() => setLogs([]))
+      .finally(() => setLoadingL(false));
   }, []);
 
+  useEffect(() => {
+    api.get<{ data: Session[] }>('/api/internal/sessions')
+      .then(r => setSessions(r.data.data))
+      .catch(() => setSessions([]))
+      .finally(() => setLoadingS(false));
+
+    fetchLogs();
+  }, [fetchLogs]);
+
+  // Supabase Realtime: live updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard:message_logs')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'message_logs' },
+        () => { fetchLogs(); },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchLogs]);
+
   const connected = sessions.filter(s => s.status === 'connected').length;
-  const pending = sessions.filter(s => s.status === 'pending' || s.status === 'connecting').length;
+  const pending   = sessions.filter(s => s.status === 'pending' || s.status === 'connecting').length;
+  const inbound   = logs.filter(l => l.direction === 'inbound').length;
+  const outbound  = logs.filter(l => l.direction === 'outbound').length;
 
   const stats = [
-    { icon: Smartphone, label: 'Total Sesi', value: sessions.length, sub: `${connected} terhubung` },
-    { icon: MessageSquare, label: 'Pesan Masuk (hari)', value: logs.filter(l => l.direction === 'inbound').length, sub: 'Dari semua sesi' },
-    { icon: Activity, label: 'Pesan Keluar (hari)', value: logs.filter(l => l.direction === 'outbound').length, sub: 'Dari semua sesi' },
-    { icon: TrendingUp, label: 'Sesi Aktif', value: connected + pending, sub: 'Terhubung + Pending' },
+    { icon: Smartphone,    label: 'Total Sesi',          value: sessions.length, sub: `${connected} terhubung` },
+    { icon: MessageSquare, label: 'Pesan Masuk Terbaru', value: inbound,          sub: 'Dari 10 log terakhir' },
+    { icon: Activity,      label: 'Pesan Keluar Terbaru', value: outbound,        sub: 'Dari 10 log terakhir' },
+    { icon: TrendingUp,    label: 'Sesi Aktif',          value: connected + pending, sub: 'Terhubung + Pending' },
   ];
 
   return (
@@ -139,19 +170,33 @@ export default function DashboardHome() {
             </div>
           ) : (
             <ul className={styles.logList}>
-              {logs.map(l => (
-                <li key={l.id} className={styles.logItem}>
-                  <div
-                    className={styles.logDot}
-                    style={{ background: l.direction === 'inbound' ? 'var(--c-info)' : 'var(--c-brand-500)' }}
-                  />
-                  <div className={styles.logInfo}>
-                    <span className={styles.logNum}>{l.direction === 'inbound' ? l.from_number : l.to_number}</span>
-                    <span className={styles.logPrev}>{l.content_preview ?? '(media)'}</span>
-                  </div>
-                  <span className={styles.logDir}>{l.direction === 'inbound' ? 'Masuk' : 'Keluar'}</span>
-                </li>
-              ))}
+              {logs.slice(0, 8).map(l => {
+                const isIn = l.direction === 'inbound';
+                const phone = cleanNumber(isIn ? l.from_number : l.to_number);
+                const sessionName = sessions.find(s => s.id === l.session_id)?.session_name;
+                return (
+                  <li key={l.id} className={styles.logItem}>
+                    <div
+                      className={styles.logDirIcon}
+                      data-dir={l.direction}
+                    >
+                      {isIn ? <Inbox size={13} /> : <Send size={13} />}
+                    </div>
+                    <div className={styles.logInfo}>
+                      <div className={styles.logTopRow}>
+                        <span className={styles.logNum}>{phone}</span>
+                        <span className={styles.logTime}>{timeAgo(l.created_at)}</span>
+                      </div>
+                      <span className={styles.logPrev}>
+                        {l.content_preview || '(media)'}
+                      </span>
+                      {sessionName && (
+                        <span className={styles.logSession}>{sessionName}</span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

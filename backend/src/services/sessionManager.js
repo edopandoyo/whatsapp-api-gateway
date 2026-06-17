@@ -73,6 +73,19 @@ const updateSessionStatus = async (sessionId, status, extras = {}) => {
  * Schema: session_id, wa_message_id, direction, phone_number, type, status, payload
  */
 const logIncomingMessage = async (sessionId, msg) => {
+  // Build richer payload for media messages
+  const payload = {
+    text:      msg.body    || null,
+    hasMedia:  msg.hasMedia || false,
+    timestamp: msg.timestamp,
+  };
+
+  if (msg.hasMedia) {
+    payload.mimetype  = msg.mimetype  || null;
+    payload.filename  = msg.filename  || null;
+    payload.mediaKey  = msg.mediaKey  || null;
+  }
+
   const { data, error } = await supabase.from('message_logs').insert({
     session_id:    sessionId,
     wa_message_id: msg.id?.id    || null,
@@ -80,7 +93,7 @@ const logIncomingMessage = async (sessionId, msg) => {
     phone_number:  msg.from,
     type:          msg.type === 'chat' ? 'text' : (msg.type || 'text'),
     status:        'received',
-    payload:       { text: msg.body, hasMedia: msg.hasMedia, timestamp: msg.timestamp },
+    payload,
   }).select('id').single();
 
   if (error) {

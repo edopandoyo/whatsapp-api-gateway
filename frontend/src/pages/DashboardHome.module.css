@@ -99,17 +99,40 @@
 /* Log list */
 .logList { list-style: none; }
 .logItem {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: flex-start; gap: 12px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--c-border-2);
   font-size: 13px;
+  transition: background 0.15s;
 }
+.logItem:hover { background: rgba(255,255,255,.02); }
 .logItem:last-child { border-bottom: none; }
-.logDot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.logInfo { flex: 1; overflow: hidden; }
-.logNum  { font-weight: 500; display: block; }
-.logPrev { color: var(--c-text-2); font-size: 12px; white-space: nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
-.logDir  { font-size: 11px; color: var(--c-text-3); flex-shrink: 0; }
+
+.logDirIcon {
+  width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+}
+.logDirIcon[data-dir="inbound"] {
+  background: rgba(88,166,255,.12); color: var(--c-info);
+}
+.logDirIcon[data-dir="outbound"] {
+  background: rgba(34,197,94,.12); color: var(--c-brand-500);
+}
+
+.logInfo { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 2px; }
+.logTopRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.logNum  { font-weight: 600; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; letter-spacing: .01em; }
+.logTime { font-size: 11px; color: var(--c-text-3); flex-shrink: 0; white-space: nowrap; }
+.logPrev {
+  color: var(--c-text-2); font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.4;
+}
+.logSession {
+  font-size: 11px; color: var(--c-text-3);
+  margin-top: 1px;
+}
 
 .skeleton {
   background: linear-gradient(90deg, var(--c-surface-2), var(--c-border), var(--c-surface-2));

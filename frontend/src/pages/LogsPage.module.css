@@ -133,6 +133,15 @@
   background: var(--c-bg-hover);
 }
 
+.clickableRow {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.clickableRow:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .timeCell {
   white-space: nowrap;
   font-size: 13px;
@@ -185,6 +194,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.msgText {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-text-1);
+  font-style: normal;
+}
+
+.msgMedia {
+  font-style: italic;
+  color: var(--c-text-4);
+  font-weight: 400;
+}
+
+.mediaLabel {
+  font-weight: 600;
+  color: var(--c-text-2);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  flex-shrink: 0;
 }
 
 .typeBadge {

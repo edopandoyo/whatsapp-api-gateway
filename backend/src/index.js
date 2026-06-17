@@ -136,6 +136,56 @@ const internalRouter = express.Router();
 internalRouter.use(rateLimiter);
 internalRouter.use(authenticateJWT);
 
+// Helper: Determine if a message type is media
+const MEDIA_TYPES = ['media', 'image', 'document', 'video', 'audio', 'sticker'];
+const isMediaType = (type) => MEDIA_TYPES.includes(type);
+
+// Helper: Map message type to human-readable label
+const mediaTypeLabel = (type, mimetype) => {
+  if (type !== 'media' && type !== 'text') return type.charAt(0).toUpperCase() + type.slice(1);
+  if (!mimetype) return 'File';
+  const cat = mimetype.split('/')[0];
+  const map = { image: 'Image', video: 'Video', audio: 'Audio', application: 'Document' };
+  return map[cat] || 'File';
+};
+
+// Helper: Extract human-readable preview from payload JSONB
+function extractContentPreview(row) {
+  const payload = row.payload || {};
+  const type = row.type;
+
+  if (type === 'text') {
+    return payload.text || null;
+  }
+
+  if (isMediaType(type)) {
+    // Outbound: caption or filename or type label
+    // Inbound:  text (body = caption) or type label
+    const caption  = payload.caption || payload.text || null;
+    const filename = payload.filename || null;
+    const label    = mediaTypeLabel(type, payload.mimetype);
+
+    if (caption) return caption;
+    if (filename) return `📎 ${filename}`;
+    return `[${label}]`;
+  }
+
+  return payload.text || payload.caption || null;
+}
+
+// Helper: Build structured media_meta for frontend rendering
+function buildMediaMeta(row) {
+  if (!isMediaType(row.type)) return null;
+  const payload = row.payload || {};
+  return {
+    mimetype:  payload.mimetype  || null,
+    filename:  payload.filename  || null,
+    caption:   payload.caption   || payload.text || null,
+    mediaUrl:  payload.mediaUrl  || null,
+    type_label: mediaTypeLabel(row.type, payload.mimetype),
+  };
+}
+
 internalRouter.get('/messages', async (req, res, next) => {
   try {
     const limit     = Math.min(parseInt(req.query.limit   || '50', 10), 200);
@@ -143,6 +193,7 @@ internalRouter.get('/messages', async (req, res, next) => {
     const direction = req.query.direction;   // opsional
     const status    = req.query.status;      // opsional
     const sessionId = req.query.session_id;  // opsional — filter satu sesi
+    const search    = (req.query.search || '').trim().toLowerCase();
 
     // Ambil semua session_id milik user ini
     const { data: userSessions } = await supabase
@@ -185,16 +236,40 @@ internalRouter.get('/messages', async (req, res, next) => {
     }
 
     const source = req.query.source;  // 'ai_reply' | 'api' | 'manual'
-if (['ai_reply', 'api', 'manual'].includes(source)) {
-  query = query.eq('source', source);
-}
+    if (['ai_reply', 'api', 'manual'].includes(source)) {
+      query = query.eq('source', source);
+    }
+
+    // Search: filter by phone number at DB level
+    if (search) {
+      query = query.ilike('phone_number', `%${search}%`);
+    }
 
     const { data, error, count } = await query;
     if (error) throw new Error(error.message);
 
+    // Transform rows: map DB fields to frontend-expected fields
+    let transformed = (data || []).map(row => ({
+      ...row,
+      message_type: row.type,
+      from_number: row.direction === 'inbound' ? row.phone_number : null,
+      to_number:   row.direction === 'outbound' ? row.phone_number : null,
+      content_preview: extractContentPreview(row),
+      media_meta:      buildMediaMeta(row),
+    }));
+
+    // If search term exists, also match against message text content (in-memory)
+    if (search) {
+      transformed = transformed.filter(row => {
+        const phoneMatch = (row.phone_number || '').toLowerCase().includes(search);
+        const textContent = (row.payload?.text || row.payload?.caption || '').toLowerCase();
+        return phoneMatch || textContent.includes(search);
+      });
+    }
+
     res.json({
       success: true,
-      data,
+      data: transformed,
       meta: { total: count, limit, offset },
     });
   } catch (err) {
