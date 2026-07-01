@@ -31,11 +31,25 @@ const server = http.createServer(app);
 // ============================================================
 // SOCKET.IO SERVER
 // ============================================================
-const io = new Server(server, {
-  cors: {
-    origin:      env.CORS_ORIGINS,
-    credentials: true,
+const socketCorsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    const isLocalhost = origin.startsWith('http://localhost:') || 
+                        origin.startsWith('https://localhost:') || 
+                        origin === 'http://localhost' || 
+                        origin === 'http://127.0.0.1' || 
+                        origin.startsWith('http://127.0.0.1:');
+    if (env.CORS_ORIGINS.indexOf(origin) !== -1 || isLocalhost) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
   },
+  credentials: true,
+};
+
+const io = new Server(server, {
+  cors: socketCorsOptions,
 });
 
 // Socket.io middleware — validasi JWT sebelum koneksi WS
@@ -109,10 +123,36 @@ io.on('connection', (socket) => {
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
-app.use(cors({
-  origin:      env.CORS_ORIGINS,
-  credentials: true,
-}));
+const corsOptionsDelegate = (req, callback) => {
+  let corsOptions;
+  
+  if (req.path.startsWith('/api/v1')) {
+    corsOptions = { origin: true };
+  } else {
+    const origin = req.header('Origin');
+    let isAllowed = false;
+    
+    if (!origin) {
+      isAllowed = true;
+    } else {
+      const isLocalhost = origin.startsWith('http://localhost:') || 
+                          origin.startsWith('https://localhost:') || 
+                          origin === 'http://localhost' || 
+                          origin === 'http://127.0.0.1' || 
+                          origin.startsWith('http://127.0.0.1:');
+      
+      if (env.CORS_ORIGINS.indexOf(origin) !== -1 || isLocalhost) {
+        isAllowed = true;
+      }
+    }
+    
+    corsOptions = { origin: isAllowed, credentials: true };
+  }
+  
+  callback(null, corsOptions);
+};
+
+app.use(cors(corsOptionsDelegate));
 app.use(express.json({ limit: '50mb' }));   // 50 MB: cover base64 media
 app.use(express.urlencoded({ extended: true }));
 app.use(morganLogger);
