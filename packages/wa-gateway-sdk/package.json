@@ -1,0 +1,49 @@
+{
+    "name": "@masedostudio/wa-gateway-sdk",
+    "version": "1.0.0",
+    "description": "SDK for WhatsApp API Gateway - manage sessions, scan QR codes, and send messages/media via WhatsApp Web",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "clean": "rimraf dist",
+        "prepublishOnly": "npm run clean && npm run build"
+    },
+    "keywords": [
+        "whatsapp",
+        "wa",
+        "gateway",
+        "api",
+        "sdk",
+        "baileys",
+        "photobooth",
+        "masedo"
+    ],
+    "author": "Masedo Studio",
+    "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "axios": "^1.7.0"
+    },
+    "devDependencies": {
+        "typescript": "^5.4.0",
+        "rimraf": "^5.0.0",
+        "@types/react": "^18.2.0"
+    },
+    "peerDependencies": {
+        "react": ">=18.0.0"
+    },
+    "peerDependenciesMeta": {
+        "react": {
+            "optional": true
+        }
+    }
+}

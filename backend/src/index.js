@@ -18,6 +18,8 @@ const sessionManager = require('./services/sessionManager');
 const sessionsRouterFactory        = require('./routes/sessions');
 const messagesRouterFactory        = require('./routes/messages');       // internal
 const messagesExternalRouterFactory = require('./routes/messagesExternal'); // external API
+const sessionsExternalRouterFactory = require('./routes/sessionsExternal'); // external sessions API
+const integrationRouter             = require('./routes/integration');      // auto-provisioning
 const apiKeysRouter          = require('./routes/apiKeys');
 const aiConfigRouter         = require('./routes/aiConfig');
 
@@ -331,6 +333,22 @@ const externalRouter = express.Router();
 externalRouter.use(rateLimiter);
 externalRouter.use(authenticateApiKey);
 externalRouter.use('/messages', messagesExternalRouterFactory(io)); // POST /api/v1/messages/*
+externalRouter.use('/sessions', sessionsExternalRouterFactory(io)); // /api/v1/sessions/*
+
+// Public endpoints under v1 (no API key auth required)
+app.get('/api/v1/health', (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      status:  'ok',
+      uptime:  process.uptime(),
+      timestamp: new Date().toISOString(),
+    }
+  });
+});
+
+// Auto-provisioning API (uses master API key authentication internally)
+app.use('/api/v1/integration', integrationRouter);
 
 app.use('/api/v1', externalRouter);
 

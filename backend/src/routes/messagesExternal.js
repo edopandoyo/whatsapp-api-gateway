@@ -156,6 +156,65 @@ module.exports = (io) => {
   });
 
   // ----------------------------------------------------------
+  // POST /messages/send-text (SDK Compatible)
+  // Kirim pesan teks
+  // Body: { sessionId, to, message }
+  // ----------------------------------------------------------
+  router.post('/send-text', async (req, res, next) => {
+    try {
+      const sessionId = req.body.sessionId || req.body.session_id;
+      const to = req.body.to;
+      const message = req.body.message || req.body.text;
+
+      if (!sessionId || !to || !message) {
+        return res.status(400).json({
+          success: false,
+          error: 'Field "sessionId", "to", dan "message" wajib diisi.',
+        });
+      }
+
+      if (!isValidPhoneNumber(to)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Nomor telepon tidak valid. Gunakan format: 628xxx',
+        });
+      }
+
+      const client = await getAuthorizedClient(sessionId, req.userId, res);
+      if (!client) return;
+
+      const chatId = formatPhoneNumber(to);
+      const msg = await client.sendMessage(chatId, message);
+
+      await logOutboundMessage({
+        sessionId:   sessionId,
+        to:          chatId,
+        type:        'text',
+        status:      'sent',
+        payload:     { text: message },
+        waMessageId: msg?.id?.id,
+      });
+
+      res.json({
+        success: true,
+        data: { id: msg?.id?.id, to: chatId, type: 'text', success: true, status: 'sent' },
+      });
+    } catch (err) {
+      handleWhatsAppError(err);
+      try {
+        await logOutboundMessage({
+          sessionId: req.body?.sessionId || req.body?.session_id,
+          to:        req.body?.to,
+          type:      'text',
+          status:    'failed',
+          payload:   { text: req.body?.message || req.body?.text, error: err.message },
+        });
+      } catch (_) {}
+      next(err);
+    }
+  });
+
+  // ----------------------------------------------------------
   // POST /messages/media
   // Kirim pesan media (image/pdf/dll dari URL atau base64)
   // Body: { session_id, to, mediaUrl?, base64?, mimetype, filename?, caption? }
@@ -204,6 +263,83 @@ module.exports = (io) => {
       res.json({
         success: true,
         data: { id: msg?.id?.id, to: chatId, type: 'media' },
+      });
+    } catch (err) {
+      handleWhatsAppError(err);
+      next(err);
+    }
+  });
+
+  // ----------------------------------------------------------
+  // POST /messages/send-media (SDK Compatible)
+  // Kirim pesan media (image/pdf/dll dari URL atau base64)
+  // Body: { sessionId, to, mediaType, mediaUrl?, mediaBase64?, caption?, filename?, mimeType? }
+  // ----------------------------------------------------------
+  router.post('/send-media', async (req, res, next) => {
+    try {
+      const sessionId = req.body.sessionId || req.body.session_id;
+      const to = req.body.to;
+      const mediaType = req.body.mediaType || req.body.media_type || 'media';
+      const mediaUrl = req.body.mediaUrl || req.body.media_url;
+      const mediaBase64 = req.body.mediaBase64 || req.body.media_base64 || req.body.base64;
+      const caption = req.body.caption;
+      const filename = req.body.filename;
+      const mimeType = req.body.mimeType || req.body.mime_type || req.body.mimetype;
+
+      if (!sessionId || !to) {
+        return res.status(400).json({
+          success: false,
+          error: 'Field "sessionId" dan "to" wajib diisi.',
+        });
+      }
+
+      if (!mediaUrl && !mediaBase64) {
+        return res.status(400).json({
+          success: false,
+          error: 'Salah satu dari "mediaUrl" atau "mediaBase64" wajib diisi.',
+        });
+      }
+
+      if (!mediaUrl && !mimeType) {
+        return res.status(400).json({
+          success: false,
+          error: 'Field "mimeType" wajib diisi jika mengirim media base64.',
+        });
+      }
+
+      if (!isValidPhoneNumber(to)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Nomor telepon tidak valid. Gunakan format: 628xxx',
+        });
+      }
+
+      const client = await getAuthorizedClient(sessionId, req.userId, res);
+      if (!client) return;
+
+      const chatId = formatPhoneNumber(to);
+
+      let media;
+      if (mediaUrl) {
+        media = await MessageMedia.fromUrl(mediaUrl, { unsafeMime: true });
+      } else {
+        media = new MessageMedia(mimeType, mediaBase64, filename || 'file');
+      }
+
+      const msg = await client.sendMessage(chatId, media, { caption: caption || '' });
+
+      await logOutboundMessage({
+        sessionId:   sessionId,
+        to:          chatId,
+        type:        mediaType,
+        status:      'sent',
+        payload:     { mediaUrl, mimetype: mimeType || media.mimetype, filename, caption },
+        waMessageId: msg?.id?.id,
+      });
+
+      res.json({
+        success: true,
+        data: { id: msg?.id?.id, to: chatId, type: mediaType, success: true, status: 'sent' },
       });
     } catch (err) {
       handleWhatsAppError(err);
