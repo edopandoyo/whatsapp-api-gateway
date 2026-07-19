@@ -229,5 +229,85 @@ module.exports = (io) => {
     }
   });
 
+  // ----------------------------------------------------------
+  // POST /sessions/:sessionId/test-webhook
+  // Kirim payload dummy ke webhook_url sesi untuk keperluan testing
+  // ----------------------------------------------------------
+  router.post('/:sessionId/test-webhook', async (req, res, next) => {
+    try {
+      const { sessionId } = req.params;
+
+      // Verifikasi kepemilikan dan ambil webhook_url
+      const { data: session, error: sessionError } = await supabase
+        .from('sessions')
+        .select('id, webhook_url, status')
+        .eq('id', sessionId)
+        .eq('user_id', req.userId)
+        .single();
+
+      if (sessionError || !session) {
+        return res.status(404).json({ success: false, error: 'Sesi tidak ditemukan.' });
+      }
+
+      if (!session.webhook_url) {
+        return res.status(400).json({
+          success: false,
+          error: 'Sesi ini belum memiliki webhook_url. Set webhook_url terlebih dahulu via PATCH /sessions/:id.',
+        });
+      }
+
+      // Payload dummy yang menyerupai pesan masuk nyata
+      const testPayload = {
+        event:      'message.received',
+        session_id: sessionId,
+        timestamp:  new Date().toISOString(),
+        test:       true,
+        data: {
+          id:       'TEST_MESSAGE_ID',
+          from:     '628000000000@c.us',
+          to:       '628111111111@c.us',
+          body:     '👋 Ini adalah test webhook dari WebWA Gateway.',
+          type:     'chat',
+          hasMedia: false,
+        },
+      };
+
+      const axios = require('axios');
+
+      try {
+        const response = await axios.post(session.webhook_url, testPayload, {
+          headers: {
+            'Content-Type':      'application/json',
+            'X-WebWA-Event':     'message.received',
+            'X-WebWA-SessionId': sessionId,
+            'X-WebWA-Attempt':   '1',
+            'X-WebWA-Test':      'true',
+          },
+          timeout: 10_000,
+          validateStatus: (s) => s >= 200 && s < 300,
+        });
+
+        return res.json({
+          success:     true,
+          message:     'Test webhook berhasil dikirim.',
+          webhook_url: session.webhook_url,
+          status_code: response.status,
+          payload_sent: testPayload,
+        });
+      } catch (deliveryErr) {
+        return res.status(502).json({
+          success:     false,
+          error:       `Webhook endpoint gagal merespons: ${deliveryErr.message}`,
+          webhook_url: session.webhook_url,
+          status_code: deliveryErr.response?.status || null,
+          payload_sent: testPayload,
+        });
+      }
+    } catch (err) {
+      next(err);
+    }
+  });
+
   return router;
 };
+
