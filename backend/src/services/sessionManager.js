@@ -254,6 +254,19 @@ const createSession = (sessionId, io, retryCount = 0, maxAutoReconnect = 0) => {
     // Abaikan pesan broadcast/status WhatsApp
     if (msg.from === 'status@broadcast') return;
 
+    // Resolve nomor telepon asli jika pengirim menggunakan ID LID (Login/List ID)
+    if (msg.from && msg.from.endsWith('@lid')) {
+      try {
+        const contact = await client.getContactById(msg.from);
+        if (contact && contact.number) {
+          console.log(`[SessionManager] Mengubah LID ${msg.from} ke nomor asli: ${contact.number}@c.us`);
+          msg.from = `${contact.number}@c.us`;
+        }
+      } catch (err) {
+        console.warn(`[SessionManager] Gagal resolve LID untuk ${msg.from}:`, err.message);
+      }
+    }
+
     console.log(`[SessionManager] Pesan masuk di ${sessionId} dari ${msg.from}`);
 
     // Simpan ke DB
